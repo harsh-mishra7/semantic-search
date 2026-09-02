@@ -1,0 +1,21 @@
+# Environment
+.venv/
+venv/
+.env
+
+# Generated index artifacts
+index/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+
+# Model cache
+.cache/
+
+# OS / editor
+.DS_Store
+.idea/
+*.swp
