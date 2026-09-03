@@ -3,7 +3,7 @@
 A learning project. We build a retrieval-augmented generation system from scratch,
 in stages, with no framework doing the interesting parts for us.
 
-**Status:** Phase 0 complete. Environment + corpus ready; no pipeline code yet.
+**Status:** Phases 0-3 complete. Working semantic search, no LLM yet. Next: Phase 4 (eval set + metrics).
 
 ---
 
@@ -462,9 +462,9 @@ Fill this in from Phase 4 onward. Every row is a thing you learned.
 ## 9. Progress
 
 - [x] Phase 0 — Setup
-- [ ] Phase 1 — Load and chunk
-- [ ] Phase 2 — Embeddings
-- [ ] Phase 3 — Store and search
+- [x] Phase 1 — Load and chunk
+- [x] Phase 2 — Embeddings
+- [x] Phase 3 — Store and search
 - [ ] Phase 4 — Measure and improve
 - [ ] Phase 5 — Generation
 - [ ] Phase 6 — Better retrieval
