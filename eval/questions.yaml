@@ -1,0 +1,111 @@
+# Phase 4 evaluation set.
+#
+# HOW THESE WERE WRITTEN, and why it matters:
+#
+# By reading the documents and asking "what would someone search for to find
+# this?" -- NOT by running the system and recording what it returned. The second
+# method produces an eval set that always scores well and can never tell you
+# you have regressed, because it measures the system against itself.
+#
+# `expected_sources` was then verified by grep: every listed path really does
+# contain the answer, and paths were NOT listed just because they seemed likely.
+# Where several documents genuinely answer a question (this corpus has five
+# overlapping deployment guides) all of them are listed -- marking a correct
+# retrieval as wrong is just as damaging to the metric as the reverse.
+#
+# Paths match Chunk.doc_path: relative to data/, so they start with quick-clinic/.
+#
+# 25 questions, covering all 17 documents.
+
+- question: "why can't the socket server be hosted on Vercel?"
+  expected_sources: ["quick-clinic/socket-server/DEPLOYMENT.md"]
+  note: "Only this doc explains the serverless/WebSocket limitation."
+
+- question: "the earnings dashboard charts are blank"
+  expected_sources: ["quick-clinic/INSTALL_RECHARTS.md"]
+  note: "233-byte file, one chunk. Tests whether a tiny document can be found at all."
+
+- question: "where do uploaded avatar images get stored?"
+  expected_sources: ["quick-clinic/PROFILE_PICTURES_SETUP.md"]
+
+- question: "I'm getting an error that Cloudinary credentials were not found"
+  expected_sources: ["quick-clinic/PROFILE_PICTURES_SETUP.md"]
+
+- question: "which prisma migration adds the profile image column?"
+  expected_sources: ["quick-clinic/PROFILE_PICTURES_SETUP.md"]
+
+- question: "what are the demo login credentials for a doctor account?"
+  expected_sources: ["quick-clinic/README.md"]
+
+- question: "how do I apply database migrations when the app runs in docker?"
+  expected_sources: ["quick-clinic/README.md"]
+
+- question: "can I deploy this on Fly.io or Google Cloud Run?"
+  expected_sources:
+    - "quick-clinic/socket-server/DOCKER_DEPLOYMENT.md"
+    - "quick-clinic/socket-server/DEPLOYMENT.md"
+
+- question: "why use Docker on Render instead of a plain node build?"
+  expected_sources: ["quick-clinic/socket-server/RENDER_DEPLOYMENT.md"]
+
+- question: "what REST endpoints does the chat API expose?"
+  expected_sources: ["quick-clinic/socket-server/README.md"]
+
+- question: "how do I run the Next.js frontend and the socket backend at the same time?"
+  expected_sources:
+    - "quick-clinic/socket-server/LOCAL_SETUP.md"
+    - "quick-clinic/socket-server/README.md"
+
+- question: "how do I tail the socket server logs under docker compose?"
+  expected_sources:
+    - "quick-clinic/socket-server/QUICK_START.md"
+    - "quick-clinic/socket-server/DOCKER_SETUP.md"
+
+- question: "the deployed service takes ages to respond after nobody has used it for a while"
+  expected_sources:
+    - "quick-clinic/DEPLOYMENT_SETUP.md"
+    - "quick-clinic/socket-server/RENDER_DEPLOYMENT.md"
+    - "quick-clinic/socket-server/RENDER_STEP_BY_STEP.md"
+    - "quick-clinic/socket-server/DEPLOYMENT.md"
+  note: "Free-tier spin-down is genuinely documented in four places."
+
+- question: "which Vercel URL should the socket server accept as the frontend origin?"
+  expected_sources: ["quick-clinic/DEPLOYMENT_SETUP.md"]
+
+- question: "what do I enter in the Root Directory and Dockerfile Path fields on Render?"
+  expected_sources:
+    - "quick-clinic/socket-server/RENDER_STEP_BY_STEP.md"
+    - "quick-clinic/socket-server/RENDER_DEPLOYMENT.md"
+
+- question: "what is the database relationship between a User and a Doctor?"
+  expected_sources: ["quick-clinic/docs/er-diagram.md"]
+  note: "94% mermaid. Phase 3 showed this ranks 6th on a similar question -- the known-bad case."
+
+- question: "which columns are on the User table?"
+  expected_sources: ["quick-clinic/docs/er-diagram.md"]
+
+- question: "what can an admin do about a doctor who is misbehaving?"
+  expected_sources: ["quick-clinic/docs/features.md"]
+
+- question: "what is sub-admin delegation?"
+  expected_sources: ["quick-clinic/docs/features.md"]
+
+- question: "what happens to appointments already booked when a doctor takes leave?"
+  expected_sources:
+    - "quick-clinic/docs/workflow.md"
+    - "quick-clinic/docs/features.md"
+
+- question: "how does a new user get assigned a role when they sign up?"
+  expected_sources: ["quick-clinic/docs/workflow.md"]
+
+- question: "a doctor in India set leave for 2 PM and the app displayed a different time"
+  expected_sources: ["quick-clinic/TIMEZONE_HANDLING.md"]
+
+- question: "should the browser or the server convert a timestamp to UTC?"
+  expected_sources: ["quick-clinic/TIMEZONE_HANDLING.md"]
+
+- question: "is a forgot-password flow built yet?"
+  expected_sources: ["quick-clinic/TODO_LIST.txt"]
+
+- question: "what authentication work is still outstanding?"
+  expected_sources: ["quick-clinic/TODO_LIST.txt"]

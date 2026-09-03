@@ -26,13 +26,21 @@ def main() -> int:
     ap.add_argument("--model", default=DEFAULT_MODEL)
     ap.add_argument("--size", type=int, default=DEFAULT_CHUNK_SIZE)
     ap.add_argument("--overlap", type=int, default=DEFAULT_OVERLAP)
+    ap.add_argument("--strategy", default="heading", choices=["fixed", "heading"])
+    ap.add_argument("--prepend-context", action="store_true", default=True)
+    ap.add_argument("--no-prepend-context", dest="prepend_context", action="store_false")
+    ap.add_argument("--min-section", type=int, default=150)
     args = ap.parse_args()
 
     t0 = time.perf_counter()
     docs = load_documents(args.data)
-    chunks = chunk_documents(docs, size=args.size, overlap=args.overlap)
+    chunks = chunk_documents(docs, size=args.size, overlap=args.overlap,
+                             strategy=args.strategy, prepend_context=args.prepend_context,
+                             min_section=args.min_section)
     t_chunk = time.perf_counter() - t0
     print(f"loaded    {len(docs)} documents -> {len(chunks)} chunks  ({t_chunk:.2f}s)")
+    print(f"chunking  {args.strategy} size={args.size} overlap={args.overlap} "
+          f"min_section={args.min_section} prepend_context={args.prepend_context}")
 
     t0 = time.perf_counter()
     embedder = LocalEmbedder(args.model)
@@ -42,7 +50,8 @@ def main() -> int:
     # One call for the whole corpus -- see LocalEmbedder.encode on why batching
     # matters. The chunk order here IS the row order of the matrix.
     t0 = time.perf_counter()
-    vectors = embedder.encode([c.text for c in chunks], show_progress=True)
+    # embed_text: includes the prepended "title > heading path" when enabled.
+    vectors = embedder.encode([c.embed_text for c in chunks], show_progress=True)
     t_embed = time.perf_counter() - t0
     print(f"embedded  {vectors.shape} {vectors.dtype}  ({t_embed:.2f}s, "
           f"{len(chunks) / t_embed:.0f} chunks/s)")

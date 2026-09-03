@@ -3,7 +3,8 @@
 A learning project. We build a retrieval-augmented generation system from scratch,
 in stages, with no framework doing the interesting parts for us.
 
-**Status:** Phases 0-3 complete. Working semantic search, no LLM yet. Next: Phase 4 (eval set + metrics).
+**Status:** Phases 0-4 complete. Measured retrieval: recall@1 0.88, MRR 0.901.
+No LLM yet. Next: Phase 5 (generation).
 
 ---
 
@@ -453,9 +454,81 @@ Named so you know they exist and know you skipped them on purpose:
 
 Fill this in from Phase 4 onward. Every row is a thing you learned.
 
-| Date | Config | recall@1 | recall@5 | MRR | Notes |
-|---|---|---|---|---|---|
-| | baseline: 500 char / 75 overlap / MiniLM | | | | |
+All rows: 25 questions, 17 documents, `all-MiniLM-L6-v2`, document-level scoring.
+`+title` = heading path prepended to the chunk before embedding (embedding only,
+never citation). `min=N` = merge markdown sections shorter than N chars.
+
+**Caveat that governs how to read this table:** 25 questions means one question
+is worth 0.04 of recall. A recall@1 difference of 0.04 is *one question* and is
+noise. MRR moves in finer increments and is the more trustworthy column, but it
+is still 25 samples. Only differences that repeat across several independent
+pairings should be believed -- which is precisely why `+title` is convincing
+below and no single row is.
+
+### Chunk size and overlap (fixed-window, the Phase 1 chunker)
+
+| Date | Config | chunks | recall@1 | recall@5 | MRR | Notes |
+|---|---|---|---|---|---|---|
+| 2026-09-03 | 300 / 0 | 279 | 0.68 | 1.00 | 0.813 | |
+| 2026-09-03 | 300 / 75 | 363 | 0.76 | 0.96 | 0.855 | best MRR of the fixed sweep |
+| 2026-09-03 | 300 / 150 | 530 | 0.72 | 1.00 | 0.840 | 50% overlap, no gain |
+| 2026-09-03 | 500 / 0 | 170 | 0.76 | 0.92 | 0.841 | **beats the baseline with NO overlap** |
+| 2026-09-03 | **500 / 75 (baseline)** | 196 | **0.76** | **0.92** | **0.823** | the Phase 1 default |
+| 2026-09-03 | 500 / 150 | 232 | 0.72 | 0.92 | 0.798 | more overlap, worse |
+| 2026-09-03 | 1000 / 0 | 88 | 0.68 | 1.00 | 0.783 | r@5 perfect, r@1 poor: dilution |
+| 2026-09-03 | 1000 / 75 | 94 | 0.64 | 1.00 | 0.779 | worst r@1 measured |
+| 2026-09-03 | 1000 / 150 | 101 | 0.68 | 0.96 | 0.784 | |
+| 2026-09-03 | 1500 / 150 | 65 | 0.72 | 0.96 | 0.807 | |
+
+### Structure-aware chunking and prepended context
+
+| Date | Config | chunks | recall@1 | recall@5 | MRR | Notes |
+|---|---|---|---|---|---|---|
+| 2026-09-03 | 500/75 `+title` | 196 | 0.84 | 0.88 | 0.874 | +0.051 MRR over baseline |
+| 2026-09-03 | 500/75 `heading` | 375 | 0.72 | 0.92 | 0.800 | **worse than baseline** |
+| 2026-09-03 | 500/75 `heading +title` | 375 | 0.80 | 0.92 | 0.856 | title rescues it, still < fixed+title |
+| 2026-09-03 | 300/75 `+title` | 363 | 0.80 | 0.96 | 0.863 | |
+| 2026-09-03 | 300/75 `heading` | 475 | 0.72 | 0.96 | 0.830 | worse than 300/75 fixed |
+| 2026-09-03 | 300/75 `heading +title` | 475 | 0.76 | 1.00 | 0.863 | |
+| 2026-09-03 | 1000/75 `heading +title` | 341 | 0.72 | 0.88 | 0.795 | |
+
+### Fixing heading mode: merge short sections
+
+Diagnosis: raw `heading` mode put **84 chunks under 100 chars** into a 375-chunk
+index (22%). A heading with one line under it becomes an unretrievable fragment
+that still competes for a slot in the top k.
+
+| Date | Config | chunks | tiny <100 | recall@1 | recall@5 | MRR | Notes |
+|---|---|---|---|---|---|---|---|
+| 2026-09-03 | 500/75 `heading +title` min=0 | 375 | 84 | 0.80 | 0.92 | 0.856 | |
+| 2026-09-03 | **500/75 `heading +title` min=150** | 275 | 2 | **0.88** | **0.92** | **0.901** | **shipped** (r@10 = 1.00) |
+| 2026-09-03 | 500/75 `heading +title` min=300 | 224 | 4 | 0.84 | 0.92 | 0.889 | |
+| 2026-09-03 | 500/75 `heading +title` min=500 | 241 | 10 | 0.88 | 0.92 | 0.905 | ties min=150 within noise |
+| 2026-09-03 | 300/75 `heading +title` min=150 | 392 | - | 0.80 | 1.00 | 0.877 | only config with perfect r@5 |
+| 2026-09-03 | 700/75 `heading +title` min=150 | 250 | - | 0.80 | 0.92 | 0.850 | |
+
+### What was learned
+
+1. **Prepending the heading path is the single biggest win**, and the only change
+   that improved every pairing it was applied to (4/4): +0.051, +0.056, +0.008,
+   +0.033 MRR. Consistency across independent pairings is the evidence; no one
+   delta would be.
+2. **Structure-aware chunking made things worse on its own** (3 of 4 pairings) --
+   the plan predicted a change that "seems obviously good" would regress, and
+   this was it. It only pays off once short sections are merged.
+3. **More overlap is not better.** 500/0 beat 500/75 beat 500/150 on MRR. Extra
+   overlap adds partially-redundant chunks that compete for top-k slots without
+   adding retrievable content.
+4. **Chunk size trades r@1 against r@5 exactly as predicted.** 1000-char chunks
+   reached r@5 = 1.00 while dropping to r@1 = 0.64: big chunks make a document
+   easy to find and hard to rank first.
+5. **Net: MRR 0.823 -> 0.901, recall@1 0.76 -> 0.88** (22/25 questions rank 1st).
+   The ER-diagram question that ranked 6th in Phase 3 now ranks 1st -- the
+   prepended title gives its mermaid chunks something to anchor to.
+6. **Remaining misses** (ranks 4, 7, 7): "run frontend and socket backend at the
+   same time", "how does a new user get assigned a role", "what authentication
+   work is still outstanding". The last two are Phase 6 candidates -- the TODO
+   list is bare checkboxes with no prose, which embeds badly.
 
 ---
 
@@ -465,7 +538,7 @@ Fill this in from Phase 4 onward. Every row is a thing you learned.
 - [x] Phase 1 — Load and chunk
 - [x] Phase 2 — Embeddings
 - [x] Phase 3 — Store and search
-- [ ] Phase 4 — Measure and improve
+- [x] Phase 4 — Measure and improve
 - [ ] Phase 5 — Generation
 - [ ] Phase 6 — Better retrieval
 - [ ] Phase 7 — Serve
