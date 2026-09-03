@@ -1,4 +1,5 @@
-# Phase 4 evaluation set.
+# Phase 4 evaluation set -- corpus: Javier Marías, *A Heart So White*
+# (16 chapters, Jonathan Coe's introduction, and the Penguin publication note).
 #
 # HOW THESE WERE WRITTEN, and why it matters:
 #
@@ -7,105 +8,281 @@
 # method produces an eval set that always scores well and can never tell you
 # you have regressed, because it measures the system against itself.
 #
-# `expected_sources` was then verified by grep: every listed path really does
-# contain the answer, and paths were NOT listed just because they seemed likely.
-# Where several documents genuinely answer a question (this corpus has five
-# overlapping deployment guides) all of them are listed -- marking a correct
-# retrieval as wrong is just as damaging to the metric as the reverse.
+# Every `expected_sources` entry is verified mechanically by
+# eval/verify_questions.py: each question declares an ANCHOR -- the concrete
+# detail that makes it answerable -- and the script fails if that anchor occurs
+# in any document not listed. Paths were NOT listed because they seemed likely.
+# Run it after editing this file or the corpus.
 #
-# Paths match Chunk.doc_path: relative to data/, so they start with quick-clinic/.
+# Paths match Chunk.doc_path: relative to data/, so they start with
+# heart-so-white/.
 #
-# 25 questions, covering all 17 documents.
+# ---------------------------------------------------------------------------
+# WHAT A NOVEL DOES TO THE METHOD (four changes from the quick-clinic set)
+# ---------------------------------------------------------------------------
+#
+# 1. QUESTIONS ARE PHRASED AS A READER WOULD ASK THEM, deliberately NOT in the
+#    book's own words. Lifting the text's phrasing turns the eval into a
+#    lexical-overlap test that BM25 wins by construction and that says nothing
+#    about semantic retrieval. "the bride who shot herself during the family
+#    lunch" is what a reader remembers; it is not a phrase in the novel.
+#
+# 2. PROSE RECIRCULATES, SO SOME expected_sources ARE PLURAL. Marías's method
+#    is repetition and return, and the anchor check found it empirically: the
+#    line "You must kill her" is spoken in ch03 and re-quoted, with both
+#    speakers named, in ch13. Both genuinely answer, so both are listed. The
+#    old set's rule still governs -- marking a correct retrieval as wrong
+#    damages the metric just as much as the reverse.
+#
+# 3. THEMATIC QUESTIONS ARE EXCLUDED, ON PURPOSE. "What does the novel say
+#    about secrecy?" is answered, partially, by all sixteen chapters. It has no
+#    locus, so document-level recall cannot grade it -- retrieving ch09 is
+#    neither right nor wrong. Such questions measure GENERATION quality and
+#    belong to the Phase 5 checkpoint. Mixing them in here would inflate recall
+#    while making the number mean less. The ones written and cut are listed at
+#    the bottom of this file.
+#
+# 4. 34 QUESTIONS, NOT 25. The old set's own caveat was that at 25 questions
+#    one question is worth 0.04 of recall, so a 0.04 gap is one question and is
+#    noise. At 34 it is 0.029. Still small -- the caveat stands and MRR remains
+#    the more trustworthy column -- but the coverage is what buys it: all 18
+#    documents are targeted, none by more than three questions.
 
-- question: "why can't the socket server be hosted on Vercel?"
-  expected_sources: ["quick-clinic/socket-server/DEPLOYMENT.md"]
-  note: "Only this doc explains the serverless/WebSocket limitation."
+# --- ch01: the opening suicide -------------------------------------------
+- question: "the bride who shot herself in the bathroom during a family lunch"
+  expected_sources: ["heart-so-white/ch01.txt"]
+  anchor: "bidet"
+  note: "The whole chapter is this scene. ch02 refers back to it but does not narrate it."
 
-- question: "the earnings dashboard charts are blank"
-  expected_sources: ["quick-clinic/INSTALL_RECHARTS.md"]
-  note: "233-byte file, one chunk. Tests whether a tiny document can be found at all."
+- question: "what happened to the dessert while the family crowded round the bathroom"
+  expected_sources: ["heart-so-white/ch01.txt"]
+  anchor: "melted cake"
+  note: >
+    The errand boy eats most of it and empties a guest's wine glass. Note the
+    anchor is "melted cake", not "ice-cream cake" -- the latter also occurs in
+    ch03 and ch14, which the anchor check caught.
 
-- question: "where do uploaded avatar images get stored?"
-  expected_sources: ["quick-clinic/PROFILE_PICTURES_SETUP.md"]
+# --- ch02: Havana, the balcony ------------------------------------------
+- question: "a woman in the street shouted up at him while he stood on his hotel balcony"
+  expected_sources: ["heart-so-white/ch02.txt"]
+  anchor: "doin’ up there"
+  note: "Miriam mistakes him for the man she is waiting for. He is in Havana on honeymoon."
 
-- question: "I'm getting an error that Cloudinary credentials were not found"
-  expected_sources: ["quick-clinic/PROFILE_PICTURES_SETUP.md"]
+- question: "how long had the narrator known his wife before marrying her"
+  expected_sources: ["heart-so-white/ch02.txt"]
+  anchor: "twenty-two months"
+  note: "Twenty-two months, which he calls a hasty marriage. Stated once, here."
 
-- question: "which prisma migration adds the profile image column?"
-  expected_sources: ["quick-clinic/PROFILE_PICTURES_SETUP.md"]
+# --- ch03: the overheard room ------------------------------------------
+- question: "a woman telling a man he has to kill his wife"
+  expected_sources: ["heart-so-white/ch03.txt", "heart-so-white/ch13.txt"]
+  anchor: "You must kill her"
+  note: >
+    ch03 narrates the conversation overheard through the wall; ch13 re-quotes
+    the line and names Miriam and Guillermo, so it answers too. This is the
+    clearest case of the recirculation described in the header -- and it was
+    found by the anchor check, not by reading.
 
-- question: "what are the demo login credentials for a doctor account?"
-  expected_sources: ["quick-clinic/README.md"]
+- question: "the stories about animals with odd names that the sisters knew from Cuba"
+  expected_sources: ["heart-so-white/ch03.txt"]
+  anchor: "Chirrinchinchín"
+  note: "Verum-Verum the Cow and Chirrinchinchín the Monkey. Both hapax in the corpus."
 
-- question: "how do I apply database migrations when the app runs in docker?"
-  expected_sources: ["quick-clinic/README.md"]
+# --- ch04: the interpreting profession ---------------------------------
+- question: "an interpreter inventing what two heads of state said to each other"
+  expected_sources: ["heart-so-white/ch04.txt"]
+  anchor: "cheroot"
+  note: "He mistranslates the meeting; Luisa, checking behind him, lets it stand. How they met."
 
-- question: "can I deploy this on Fly.io or Google Cloud Run?"
-  expected_sources:
-    - "quick-clinic/socket-server/DOCKER_DEPLOYMENT.md"
-    - "quick-clinic/socket-server/DEPLOYMENT.md"
+- question: "the delegate who was offended that the interpreting booths were empty"
+  expected_sources: ["heart-so-white/ch04.txt"]
+  anchor: "Flaxman"
+  note: "An Australian speaker at a Commonwealth meeting in Edinburgh."
 
-- question: "why use Docker on Render instead of a plain node build?"
-  expected_sources: ["quick-clinic/socket-server/RENDER_DEPLOYMENT.md"]
+# --- ch05: Macbeth, the title -------------------------------------------
+- question: "where does the phrase a heart so white come from"
+  expected_sources: ["heart-so-white/ch05.txt"]
+  anchor: "Lady Macbeth"
+  note: >
+    ch05 sources the title. The Macbeth material recirculates into ch12, ch14
+    and ch15, so "brainsickly" was NOT usable as the anchor -- but only ch05
+    attributes the phrase, and "Lady Macbeth" is confined to it.
 
-- question: "what REST endpoints does the chat API expose?"
-  expected_sources: ["quick-clinic/socket-server/README.md"]
+- question: "washing the blood off her hands to make the murder smaller than it was"
+  expected_sources: ["heart-so-white/ch05.txt"]
+  anchor: "A little water clears us"
+  note: "The argument that hearing a confession is what makes an accomplice."
 
-- question: "how do I run the Next.js frontend and the socket backend at the same time?"
-  expected_sources:
-    - "quick-clinic/socket-server/LOCAL_SETUP.md"
-    - "quick-clinic/socket-server/README.md"
+# --- ch06: marriage, Ranz's gifts ---------------------------------------
+- question: "the two small paintings of Venice and Trouville his father handed over"
+  expected_sources: ["heart-so-white/ch06.txt"]
+  anchor: "Trouville"
+  note: "A small Martín Rico and a smaller Boudin."
 
-- question: "how do I tail the socket server logs under docker compose?"
-  expected_sources:
-    - "quick-clinic/socket-server/QUICK_START.md"
-    - "quick-clinic/socket-server/DOCKER_SETUP.md"
+- question: "obliging someone to love you"
+  expected_sources: ["heart-so-white/ch06.txt", "heart-so-white/ch11.txt"]
+  anchor: null
+  note: >
+    Anchor-exempt: the idea is carried by ordinary words ("oblige", "coerce")
+    rather than by any distinctive term, so no anchor can confine it. ch06
+    opens on it and ch11 returns to it through the Englishwoman on coercion;
+    both genuinely answer. Kept because it is the kind of half-thematic
+    question a real reader asks -- but it is the weakest label in the set.
 
-- question: "the deployed service takes ages to respond after nobody has used it for a while"
-  expected_sources:
-    - "quick-clinic/DEPLOYMENT_SETUP.md"
-    - "quick-clinic/socket-server/RENDER_DEPLOYMENT.md"
-    - "quick-clinic/socket-server/RENDER_STEP_BY_STEP.md"
-    - "quick-clinic/socket-server/DEPLOYMENT.md"
-  note: "Free-tier spin-down is genuinely documented in four places."
+# --- ch07: the Prado, Mateu ---------------------------------------------
+- question: "the man who tried to burn a painting in the museum with a cigarette lighter"
+  expected_sources: ["heart-so-white/ch07.txt"]
+  anchor: "extinguisher"
+  note: "Mateu; Ranz wrenches a fire extinguisher off the wall to stop him."
 
-- question: "which Vercel URL should the socket server accept as the frontend origin?"
-  expected_sources: ["quick-clinic/DEPLOYMENT_SETUP.md"]
+- question: "the woman who asked her husband for poison as a wedding gift"
+  expected_sources: ["heart-so-white/ch07.txt"]
+  anchor: "Masinissa"
+  note: "Sophonisba and Masinissa -- the subject of the painting Mateu attacks."
 
-- question: "what do I enter in the Root Directory and Dockerfile Path fields on Render?"
-  expected_sources:
-    - "quick-clinic/socket-server/RENDER_STEP_BY_STEP.md"
-    - "quick-clinic/socket-server/RENDER_DEPLOYMENT.md"
+# --- ch08: Custardoy, the photographs -----------------------------------
+- question: "the friend of his father's who wears a pigtail and long sideburns"
+  expected_sources: ["heart-so-white/ch08.txt"]
+  anchor: "pigtail"
+  note: "Custardoy the younger. He appears in nine documents; only ch08 describes him."
 
-- question: "what is the database relationship between a User and a Doctor?"
-  expected_sources: ["quick-clinic/docs/er-diagram.md"]
-  note: "94% mermaid. Phase 3 showed this ranks 6th on a similar question -- the known-bad case."
+- question: "the old photograph of his mother as a young woman before she married"
+  expected_sources: ["heart-so-white/ch08.txt"]
+  anchor: "studio photograph"
+  note: "The portraits of Juana and of Teresa."
 
-- question: "which columns are on the User table?"
-  expected_sources: ["quick-clinic/docs/er-diagram.md"]
+# --- ch09: Madrid, television -------------------------------------------
+- question: "the comedian he was watching on television with the sound turned down"
+  expected_sources: ["heart-so-white/ch09.txt"]
+  anchor: "popcorn"
+  note: "Jerry Lewis, the spilt-popcorn routine."
 
-- question: "what can an admin do about a doctor who is misbehaving?"
-  expected_sources: ["quick-clinic/docs/features.md"]
+# --- ch10: Berta, the personal ads --------------------------------------
+- question: "the friend who advertised for men in a magazine and got a reply"
+  expected_sources: ["heart-so-white/ch10.txt"]
+  anchor: "personal ads"
+  note: "Berta's advertisement and the first letter. ch16 says she is still at it; ch10 is the mechanism."
 
-- question: "what is sub-admin delegation?"
-  expected_sources: ["quick-clinic/docs/features.md"]
+- question: "a video of a man in a bathrobe filmed with his head out of frame"
+  expected_sources: ["heart-so-white/ch10.txt"]
+  anchor: "Adam’s apple"
+  note: >
+    The tape he sends. "bathrobe" leaks into four other chapters, so the anchor
+    is the detail that is actually unique to this description.
 
-- question: "what happens to appointments already booked when a doctor takes leave?"
-  expected_sources:
-    - "quick-clinic/docs/workflow.md"
-    - "quick-clinic/docs/features.md"
+# --- ch11: following him ------------------------------------------------
+- question: "following a stranger into a shop to watch him open his letters"
+  expected_sources: ["heart-so-white/ch11.txt"]
+  anchor: "Nina Ricci"
+  note: "The perfume shop, the counter he leans on, the three envelopes."
 
-- question: "how does a new user get assigned a role when they sign up?"
-  expected_sources: ["quick-clinic/docs/workflow.md"]
+# --- ch12: the rain, the wait -------------------------------------------
+- question: "she asked him to go out for an hour so her visitor could come round"
+  expected_sources: ["heart-so-white/ch12.txt"]
+  anchor: "fast-food"
+  note: "Berta sends him out; the all-night place on Fourth Avenue."
 
-- question: "a doctor in India set leave for 2 PM and the app displayed a different time"
-  expected_sources: ["quick-clinic/TIMEZONE_HANDLING.md"]
+- question: "watching the street from the window while it rained for days"
+  expected_sources: ["heart-so-white/ch12.txt"]
+  anchor: "curved streetlamps"
+  note: "The bare word 'streetlamps' also occurs in ch15; the full phrase does not."
 
-- question: "should the browser or the server convert a timestamp to UTC?"
-  expected_sources: ["quick-clinic/TIMEZONE_HANDLING.md"]
+# --- ch13: Ranz's career ------------------------------------------------
+- question: "the buyer who refused to accept that the painting he owned was a copy"
+  expected_sources: ["heart-so-white/ch13.txt"]
+  anchor: "Montauban"
+  note: "The banker, and the original hanging in Montauban."
 
-- question: "is a forgot-password flow built yet?"
-  expected_sources: ["quick-clinic/TODO_LIST.txt"]
+# --- ch14: Professor Villalobos -----------------------------------------
+- question: "the academic who writes about eighteenth-century Spanish painting"
+  expected_sources: ["heart-so-white/ch14.txt"]
+  anchor: "eighteenth-century Spanish painting"
+  note: >
+    Professor Villalobos. His NAME also appears in ch15, which only mentions
+    him in passing, so the anchor is his specialism -- the thing the question
+    actually asks about.
 
-- question: "what authentication work is still outstanding?"
-  expected_sources: ["quick-clinic/TODO_LIST.txt"]
+- question: "a long lunch where someone held forth about Macbeth over the coffee"
+  expected_sources: ["heart-so-white/ch14.txt"]
+  anchor: "Cawdor"
+  note: "Glamis and Cawdor, the truffles. ch05 is Macbeth without the lunch."
+
+# --- ch15: the confession -----------------------------------------------
+- question: "listening to his father tell his wife the secret through a gap in the door"
+  expected_sources: ["heart-so-white/ch15.txt"]
+  anchor: "the still minimal crack"
+  note: "The climax: he is ill in bed and identifies Ranz's voice through the crack."
+
+- question: "coming home from a work trip a day earlier than planned"
+  expected_sources: ["heart-so-white/ch15.txt"]
+  anchor: "Switzerland"
+  note: "A public holiday ends the eight weeks a day early, which is why he is home to overhear it."
+
+- question: "why did Teresa kill herself"
+  expected_sources: ["heart-so-white/ch15.txt"]
+  anchor: null
+  note: >
+    The deliberate hard case, and the one label in this set I would defend
+    rather than call obvious. The suicide saturates the book -- ch01 narrates
+    it, ch02 names her, ch08 and ch14 both discuss it -- but only ch15 gives
+    the REASON, which is what the question asks. So ch08 or ch14 ranking first
+    is scored a miss. That is arguable; it is recorded here so that whoever
+    reads a bad score on this question knows it is a judgement call and not an
+    oversight. Anchor-exempt because no single term marks an explanation.
+
+# --- ch16: the coda -----------------------------------------------------
+- question: "is she still answering personal ads by the end"
+  expected_sources: ["heart-so-white/ch16.txt"]
+  anchor: "Truman"
+  note: "Berta has not given up; two new aliases, of which 'Truman' is one."
+
+# --- introduction (Jonathan Coe) ----------------------------------------
+- question: "the image about lighting a match in the dark to see how much darkness there is"
+  expected_sources: ["heart-so-white/introduction.txt"]
+  anchor: "Faulkner"
+  note: "Marías quoting Faulkner on the purpose of writing."
+
+- question: "why does this author use commas where other writers would use a semicolon"
+  expected_sources: ["heart-so-white/introduction.txt"]
+  anchor: "semi-colons"
+  note: >
+    Coe on punctuation keeping the general and the particular apart. Tests
+    whether the critical apparatus is separable from the novel it discusses --
+    the introduction quotes the novel, so its chunks look superficially alike.
+
+- question: "which book was the author's breakthrough and when did it come out"
+  expected_sources: ["heart-so-white/introduction.txt"]
+  anchor: "All Souls"
+  note: "All Souls, 1989. Bibliography lives in the introduction; imprint dates in the publication note."
+
+# --- publication-note ---------------------------------------------------
+- question: "who started Penguin Books and what gave him the idea"
+  expected_sources: ["heart-so-white/publication-note.txt"]
+  anchor: "Allen Lane"
+  note: >
+    Allen Lane at Exeter station in 1935. Tests whether the boilerplate
+    document is reachable at all -- it is the one document with no narrative
+    voice, and 16 of the other 17 are the same voice throughout.
+
+- question: "when was the Spanish edition published and who translated it into English"
+  expected_sources: ["heart-so-white/publication-note.txt"]
+  anchor: "Anagrama"
+  note: "Anagrama, Barcelona, 1992; The Harvill Press, 1995. The translator is thanked as M.J.C."
+
+# =========================================================================
+# WRITTEN AND CUT -- documentation, not scored.
+#
+# Good questions about the book, bad questions for a document-level retrieval
+# metric, because the answer has no locus:
+#
+#   "what does the novel say about the danger of knowing things"
+#   "why is the narrator so uneasy about his own marriage"
+#   "how does the narrator feel about working as a translator"
+#   "what is the relationship between speaking and being responsible"
+#
+# Each is answered in part by most of the sixteen chapters, so there is no
+# honest expected_sources list and recall@k cannot grade them. Use them
+# against scripts/ask.py to judge the GENERATOR instead: an answer that
+# synthesises three chapters with citations is a good answer, and the
+# retrieval metric would have called the same retrieval a coin toss.
+# =========================================================================

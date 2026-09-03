@@ -3,8 +3,12 @@
 A learning project. We build a retrieval-augmented generation system from scratch,
 in stages, with no framework doing the interesting parts for us.
 
-**Status:** Phases 0-5 complete. Retrieval: recall@1 0.88, MRR 0.901. Generation
-running on `gemini-3.6-flash`, both checkpoints passing. Next: Phase 6.
+**Status:** Phases 0-5 complete; Phase 4 re-run on a new corpus. The corpus is
+now Javier Marías's *A Heart So White* (18 documents: 16 chapters, Jonathan
+Coe's introduction, the Penguin publication note) in place of the quick-clinic
+docs. Retrieval on prose: **recall@1 0.71, MRR 0.779** at 500/0 -- down from
+0.88/0.901 on technical documentation, and the drop is the point. Generation
+running on `gemini-3.6-flash`. Next: Phase 6, where this corpus should pay off.
 
 ---
 
@@ -96,7 +100,7 @@ happen to us.
 | Embeddings | `sentence-transformers`, model `all-MiniLM-L6-v2` | Runs locally on CPU, ~80 MB, free, no API key, no rate limits. 384 dimensions. Fast enough to re-embed a corpus while experimenting — which we will do a lot. |
 | Vector store | numpy array (Phase 3) → optional swap later | A brute-force cosine search over a numpy matrix is ~15 lines and is genuinely fast up to ~100k chunks. Writing it ourselves means we understand what Chroma/Qdrant/pgvector are actually doing before we adopt one. |
 | Generation | Claude (`anthropic`, `claude-opus-5`) **or** Gemini (`google-genai`) | The "G" in RAG. Both sit behind one `Generator` protocol, same prompt, so they are directly comparable. `--backend auto` follows whichever key is set. |
-| Corpus | Your `.md` / `.txt` files in `data/` | Real documents you know well, so you can judge whether a retrieval result is actually good. |
+| Corpus | A novel, split per chapter into `data/` | Real text you know well, so you can judge whether a retrieval result is actually good. Prose has no headings, which invalidates both Phase 4 winners -- see §8. |
 | Interface | CLI first, FastAPI later | A CLI keeps the feedback loop tight. HTTP is a Phase 7 concern. |
 
 **Deliberately not using LangChain or LlamaIndex.** They are fine tools, but they
@@ -144,9 +148,11 @@ semantic-search/
 ├── scripts/
 │   ├── index.py            ← build the index
 │   ├── search.py           ← retrieval only, prints ranked chunks + scores
-│   └── ask.py              ← full RAG: retrieve + generate
+│   ├── ask.py              ← full RAG: retrieve + generate
+│   └── split_story.py      ← one-off corpus prep: ebook export → per-chapter files
 └── eval/
     ├── questions.yaml      ← Phase 4: our test set
+    ├── verify_questions.py ← audits the ANSWER KEY (paths, anchors, coverage)
     └── run_eval.py         ← Phase 4: recall@k, MRR
 ```
 
@@ -568,6 +574,125 @@ timezone chunks and asked about Vercel, the model refused rather than confabulat
    same time", "how does a new user get assigned a role", "what authentication
    work is still outstanding". The last two are Phase 6 candidates -- the TODO
    list is bare checkboxes with no prose, which embeds badly.
+
+---
+
+### Corpus change: a novel instead of technical docs (2026-09-03)
+
+Everything above was measured on 17 markdown files of project documentation.
+The corpus is now *A Heart So White* -- 18 documents, 607,449 chars, split on
+the chapter boundaries the ebook export already contained
+(`scripts/split_story.py`, lossless: verified as an identical non-whitespace
+character multiset against the source).
+
+**Why split at all.** `recall@k` and `expected_sources` score at *document*
+granularity. One 620 KB file makes the metric vacuous -- every retrieved chunk
+is trivially from the only correct document, so recall@k and MRR are 1.000 for
+every question under every configuration. 18 documents restores a real ranking
+problem.
+
+**The eval set was rewritten** (34 questions, all 18 documents targeted) with
+two method changes worth keeping: questions are phrased as a reader would ask
+them rather than in the book's words (lifting the text's phrasing measures
+lexical overlap, which BM25 wins by construction), and thematic questions were
+cut rather than labelled, because a question all sixteen chapters partly answer
+has no locus that document-level recall can grade. See the header of
+`eval/questions.yaml`.
+
+**A new script, because the answer key needs auditing too.**
+`eval/verify_questions.py` checks that every `expected_sources` path resolves,
+that each question's *anchor* -- the concrete detail making it answerable --
+occurs in no unlisted document, and that no document is untargeted. It found 8
+labelling defects on its first run, of two kinds: sloppy substring matching
+(`doin` matched *doing* in 14 documents; `crack` matched *cracked*) and genuine
+recirculation. The second kind changed the labels: `"You must kill her"` is
+spoken in ch03 and re-quoted with both speakers named in ch13, so ch13 answers
+too and is now listed. **A bad eval label is worse than a bad retriever**,
+because it makes you fix retrieval that was never broken.
+
+### Prose: chunk size and overlap
+
+| Date | Config | chunks | recall@1 | recall@5 | recall@10 | MRR | Notes |
+|---|---|---|---|---|---|---|---|
+| 2026-09-03 | 300 / 0 | 2036 | 0.74 | 0.82 | 0.94 | 0.775 | best r@1 |
+| 2026-09-03 | 300 / 75 | 2702 | 0.59 | 0.91 | 0.94 | 0.731 | worst MRR; overlap hurts most at small sizes |
+| 2026-09-03 | **500 / 0** | 1224 | 0.71 | **0.91** | 0.91 | **0.779** | **best MRR -- shipped** |
+| 2026-09-03 | 500 / 75 | 1437 | 0.68 | 0.88 | 0.91 | 0.759 | the old default |
+| 2026-09-03 | 700 / 75 | 980 | 0.71 | 0.85 | 0.91 | 0.770 | |
+| 2026-09-03 | 1000 / 75 | 663 | 0.71 | 0.85 | 0.91 | 0.774 | |
+| 2026-09-03 | 1500 / 150 | 459 | 0.71 | 0.85 | 0.88 | 0.759 | |
+
+### Prose: the two Phase 4 winners, re-tested
+
+| Date | Config | chunks | recall@1 | recall@5 | MRR | Notes |
+|---|---|---|---|---|---|---|
+| 2026-09-03 | 500/75 | 1437 | 0.68 | 0.88 | 0.759 | |
+| 2026-09-03 | 500/75 `+title` | 1437 | 0.59 | 0.88 | 0.709 | **-0.050 MRR** |
+| 2026-09-03 | 500/75 `heading +title` min=150 | 1437 | 0.59 | 0.88 | 0.709 | **bit-identical to the row above** |
+| 2026-09-03 | 500/0 | 1224 | 0.71 | 0.91 | 0.779 | |
+| 2026-09-03 | 500/0 `+title` | 1224 | 0.65 | 0.85 | 0.747 | -0.032 MRR |
+
+### What was learned from the corpus change
+
+1. **The shipped config was a no-op, and the eval could not have told us.**
+   `heading +title min=150` produces spans bit-identical to plain `fixed` here:
+   `sections()` finds 18 markdown headings in the whole corpus (one per file,
+   i.e. none), so there is nothing to split and nothing for `min_section` to
+   merge. A configuration flag that silently does nothing is worse than one
+   that does the wrong thing -- it survives every review because the numbers
+   look fine.
+
+2. **`+title` inverted, and by almost exactly the same magnitude.** It was the
+   most consistent win on the docs corpus (4/4 pairings, +0.051 MRR); here it
+   costs -0.050 and -0.032 across the two pairings tried. The mechanism is
+   clear once stated: `_title()` finds no h1 in a `.txt` file and falls back to
+   the filename stem, so every chunk in ch07 is embedded with the literal
+   prefix `ch07`. That carries no semantic signal, but it is not inert -- it
+   pulls all of a chapter's chunks toward each other, which is a *clustering*
+   effect, not a relevance one. Per-question at 500/0 it rescued one question
+   (Venice/Trouville, rank 5 -> 1, where the chapter-mates helped) and damaged
+   six, one of them from rank 3 to 7. **Prepending context is only a win when
+   the context is discriminative.** The docs corpus made that condition easy to
+   miss because real headings satisfy it automatically.
+
+3. **Zero overlap won again, 2/2 pairings** (300/0 > 300/75 by 0.044 MRR;
+   500/0 > 500/75 by 0.020). Third corpus-independent confirmation of the
+   earlier finding -- extra overlap adds partially-redundant chunks that
+   compete for top-k slots without adding retrievable content.
+
+4. **Chunk size barely matters on continuous prose.** Every config from 300 to
+   1500 chars lands in MRR 0.759-0.779, a spread smaller than the +title
+   effect. On the docs corpus size mattered a lot, because a window either did
+   or did not align with a section boundary. Prose has no boundaries to align
+   with, so there is nothing for the size knob to get right or wrong.
+
+5. **Retrieval is simply harder here: MRR 0.901 -> 0.779, recall@1 0.88 ->
+   0.71, and r@10 no longer reaches 1.00.** Not a regression -- a harder
+   problem. Technical docs are written to be *found*: each states its topic in
+   a heading and repeats its key terms. A novel is written to be read in order,
+   states its subject nowhere, and refers to everything by pronoun.
+
+6. **The three remaining misses are three different failure modes**, which is
+   why they are worth naming rather than averaging:
+   - *"how long had the narrator known his wife before marrying her"* -- the
+     answer is a duration inside a long discursive sentence. Embeddings are
+     poor at numeric and quantitative facts; BM25 would find it instantly.
+     **Phase 6 hybrid search should fix this one.**
+   - *"the woman who asked her husband for poison as a wedding gift"* -- a
+     classical digression (Sophonisba and Masinissa) buried in an art-history
+     passage. A genuine semantic failure: the paraphrase never gets near the
+     passage. **A re-ranker is the candidate here, not BM25** -- the user has
+     no rare term to match on.
+   - *"is she still answering personal ads by the end"* -- asks about narrative
+     *position*, and a chunk vector encodes no position at all. The chapter
+     that introduces the personal ads outranks the chapter that resolves them.
+     **This needs metadata, not a better embedding** -- which is exactly the
+     Phase 6 metadata-filtering item.
+
+7. **This corpus is a better Phase 6 test bed than the docs were.** It is dense
+   with rare proper nouns that pure semantic search handles badly and BM25
+   handles well, so hybrid search should show a larger, clearer win than it
+   would have on deployment guides.
 
 ---
 

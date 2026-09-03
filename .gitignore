@@ -19,3 +19,6 @@ __pycache__/
 .DS_Store
 .idea/
 *.swp
+
+# Corpus text: an in-copyright novel. Kept local, not committed.
+data/heart-so-white/

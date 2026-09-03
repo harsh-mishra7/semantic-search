@@ -25,9 +25,16 @@ def main() -> int:
     ap.add_argument("--index", default="index")
     ap.add_argument("--model", default=DEFAULT_MODEL)
     ap.add_argument("--size", type=int, default=DEFAULT_CHUNK_SIZE)
-    ap.add_argument("--overlap", type=int, default=DEFAULT_OVERLAP)
     ap.add_argument("--strategy", default="heading", choices=["fixed", "heading"])
-    ap.add_argument("--prepend-context", action="store_true", default=True)
+    # Defaults below are the measured best for the CURRENT corpus (prose), not
+    # universal truths -- see PLAN.md §8. On the previous markdown corpus the
+    # winners were overlap=75 and prepend_context=True; on a novel with no
+    # headings both lose (+title costs 0.03-0.05 MRR, since _title() falls back
+    # to the filename and prepends a non-discriminative token to every chunk).
+    # `strategy=heading` is left on because it is provably inert here (no
+    # markdown headings exist) and pays off again the moment .md files return.
+    ap.add_argument("--overlap", type=int, default=0)
+    ap.add_argument("--prepend-context", action="store_true", default=False)
     ap.add_argument("--no-prepend-context", dest="prepend_context", action="store_false")
     ap.add_argument("--min-section", type=int, default=150)
     args = ap.parse_args()
