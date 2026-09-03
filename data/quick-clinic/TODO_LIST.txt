@@ -1,0 +1,62 @@
+========================================
+           QUICK CLINIC — TODO
+========================================
+
+
+========================================
+1. AUTHENTICATION & SECURITY
+========================================
+[ ] Add OTP authentication (Phone or Email)
+[ ] Add Confirm Password option in signup
+[ ] Add Password visibility toggle
+[ ] Add Forgot Password page + backend reset flow
+[ ] Add Update User Info page
+[ ] Add Rate Limiting for OTP
+
+
+
+========================================
+3. DOCTOR FEATURES
+========================================
+
+
+========================================
+4. PATIENT FEATURES
+========================================
+
+
+
+========================================
+5. SYSTEM & BACKEND TASKS
+========================================
+[ ] Optimize Prisma schema
+[ ] Add all missing API endpoints
+[ ] Add role-based route protection (middleware)
+[ ] Improve backend error handling
+[ ] Add logging for production
+[ ] Add consistent API response structure
+[ ] Improve JWT strategy (refresh token later)
+
+
+========================================
+6. UI & UX IMPROVEMENTS
+========================================
+[ ] Add loading skeletons
+[ ] Add toast notifications instead of alerts
+[ ] Improve form validation on frontend
+[ ] Add theme support (light/dark)
+[ ] Make dashboard UI layouts for doctor/patient
+
+
+
+
+========================================
+END OF FILE
+========================================
+
+
+
+
+>>> We can add a feature to give patient review of doctors.
+>>> Apply pagination in Chat Bar.
+>>> Add prescription feature.

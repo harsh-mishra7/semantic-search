@@ -3,7 +3,7 @@
 A learning project. We build a retrieval-augmented generation system from scratch,
 in stages, with no framework doing the interesting parts for us.
 
-**Status:** planning. Nothing built yet.
+**Status:** Phase 0 complete. Environment + corpus ready; no pipeline code yet.
 
 ---
 
@@ -461,7 +461,7 @@ Fill this in from Phase 4 onward. Every row is a thing you learned.
 
 ## 9. Progress
 
-- [ ] Phase 0 — Setup
+- [x] Phase 0 — Setup
 - [ ] Phase 1 — Load and chunk
 - [ ] Phase 2 — Embeddings
 - [ ] Phase 3 — Store and search
