@@ -10,8 +10,11 @@ sentence-transformers==6.0.1
 # The vector store. Phase 3 is a numpy matrix and a dot product.
 numpy==2.5.2
 
-# Generation (Phase 5). Needs ANTHROPIC_API_KEY.
+# Generation (Phase 5). Two backends behind one Generator protocol; you need a
+# key for exactly one of them. Both are installed so either can be compared
+# without a reinstall.
 anthropic==1.3.0
+google-genai==2.22.0
 
 # Reads .env so we never hardcode a key
 python-dotenv==1.2.3

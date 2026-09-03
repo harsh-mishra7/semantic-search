@@ -4,7 +4,8 @@ A learning project. We build a retrieval-augmented generation system from scratc
 in stages, with no framework doing the interesting parts for us.
 
 **Status:** Phases 0-4 complete (retrieval: recall@1 0.88, MRR 0.901). Phase 5 code
-is written but its checkpoint is UNRUN -- it needs a real ANTHROPIC_API_KEY in .env.
+is written for two backends (Claude, Gemini); its checkpoint is UNRUN -- needs a
+real key in .env.
 
 ---
 
@@ -95,7 +96,7 @@ happen to us.
 | Language | Python 3.12 | The entire RAG/ML ecosystem is Python-first. When something confuses you, you can read the library source. |
 | Embeddings | `sentence-transformers`, model `all-MiniLM-L6-v2` | Runs locally on CPU, ~80 MB, free, no API key, no rate limits. 384 dimensions. Fast enough to re-embed a corpus while experimenting — which we will do a lot. |
 | Vector store | numpy array (Phase 3) → optional swap later | A brute-force cosine search over a numpy matrix is ~15 lines and is genuinely fast up to ~100k chunks. Writing it ourselves means we understand what Chroma/Qdrant/pgvector are actually doing before we adopt one. |
-| Generation | Claude via the `anthropic` SDK, model `claude-opus-5` | The "G" in RAG. Needs `ANTHROPIC_API_KEY`. |
+| Generation | Claude (`anthropic`, `claude-opus-5`) **or** Gemini (`google-genai`) | The "G" in RAG. Both sit behind one `Generator` protocol, same prompt, so they are directly comparable. `--backend auto` follows whichever key is set. |
 | Corpus | Your `.md` / `.txt` files in `data/` | Real documents you know well, so you can judge whether a retrieval result is actually good. |
 | Interface | CLI first, FastAPI later | A CLI keeps the feedback loop tight. HTTP is a Phase 7 concern. |
 
