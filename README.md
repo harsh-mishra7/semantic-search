@@ -6,8 +6,9 @@ Reciprocal Rank Fusion), a cross-encoder re-ranker, grounded answers with
 checkable citations, and a CLI plus an HTTP API.
 
 It was built to be *understood*, phase by phase, with an evaluation set
-deciding every design question. [PLAN.md](PLAN.md) is the build log: what was
-tried, what the numbers were, and which confident predictions turned out wrong.
+deciding every design question. [ARCHITECTURE.md](ARCHITECTURE.md) explains how
+the code fits together; [PLAN.md](PLAN.md) is the build log: what was tried,
+what the numbers were, and which confident predictions turned out wrong.
 
 ## Results
 
