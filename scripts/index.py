@@ -34,6 +34,11 @@ def main() -> int:
 
     t0 = time.perf_counter()
     docs = load_documents(args.data)
+    # An empty corpus otherwise produces a (0, 384) matrix and a perfectly
+    # valid, perfectly useless index -- and then search returns nothing with no
+    # explanation. Exposed by actually emptying data/.
+    if not docs:
+        raise SystemExit(f"no .md/.txt documents under {args.data}/ -- nothing to index")
     chunks = chunk_documents(docs, size=args.size, overlap=args.overlap,
                              strategy=args.strategy, prepend_context=args.prepend_context,
                              min_section=args.min_section)

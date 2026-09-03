@@ -1,0 +1,6 @@
+Drop .md / .txt files here, in any subdirectory structure.
+
+The loader walks this directory recursively and uses paths relative to it, so
+subdirectories become the metadata Phase 6 can filter on. Then:
+
+    python scripts/index.py
