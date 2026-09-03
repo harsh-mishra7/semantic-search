@@ -30,6 +30,8 @@ def main() -> int:
                     help="print the Gemini models this key can reach, then exit")
     ap.add_argument("-k", type=int, default=5, help="chunks to retrieve (default 5)")
     ap.add_argument("--index", default="index")
+    ap.add_argument("--mode", default="hybrid", choices=["dense", "bm25", "hybrid"],
+                    help="Phase 6: hybrid (default) fuses dense vectors with BM25")
     ap.add_argument("--effort", choices=["low", "medium", "high", "xhigh", "max"],
                     help="thinking depth; API default is high")
     ap.add_argument("--show-thinking", action="store_true")
@@ -48,7 +50,7 @@ def main() -> int:
         ap.error("a question is required (or use --list-models)")
     question = " ".join(args.question)
 
-    pipe = Pipeline(args.index)
+    pipe = Pipeline(args.index, mode=args.mode)
     results = pipe.retrieve(question, k=args.k)
 
     print(f"\nretrieved {len(results)} chunks for {question!r}")

@@ -14,7 +14,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from rag.embedder import LocalEmbedder
-from rag.retriever import Retriever
+from rag.retriever import MODES, Retriever
 from rag.store import VectorStore
 
 
@@ -24,16 +24,24 @@ def main() -> int:
     ap.add_argument("-k", type=int, default=5)
     ap.add_argument("--index", default="index")
     ap.add_argument("--full", action="store_true", help="print whole chunks, not a preview")
+    ap.add_argument("--mode", default="hybrid", choices=list(MODES),
+                    help="Phase 6: hybrid (default) fuses dense vectors with BM25")
+    ap.add_argument("--candidates", type=int, default=50,
+                    help="candidates per arm before fusion (hybrid only)")
     args = ap.parse_args()
     question = " ".join(args.question)
 
     store = VectorStore.load(args.index)
     # Same model the index was built with -- Retriever refuses otherwise.
-    retriever = Retriever(LocalEmbedder(store.meta.model_name), store)
+    retriever = Retriever(LocalEmbedder(store.meta.model_name), store,
+                          mode=args.mode, candidates=args.candidates)
 
     print(f"\nquery   {question!r}")
     print(f"index   {len(store)} chunks, {store.meta.model_name}, "
-          f"{store.meta.chunk_size}/{store.meta.overlap}\n")
+          f"{store.meta.chunk_size}/{store.meta.overlap}")
+    # The score column means something different per mode, so say which.
+    kind = {"dense": "cosine", "bm25": "BM25", "hybrid": "RRF"}[args.mode]
+    print(f"mode    {args.mode} (scores are {kind})\n")
 
     for r in retriever.retrieve(question, k=args.k):
         print(f"{r.rank}. {r.score:.3f}  {r.chunk.id}  [{r.chunk.start}:{r.chunk.end}]")

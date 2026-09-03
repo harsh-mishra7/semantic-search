@@ -6,12 +6,23 @@ from dataclasses import dataclass
 
 from rag.chunker import Chunk
 from rag.embedder import Embedder
+from rag.hybrid import RRF_K, BM25Index, reciprocal_rank_fusion
 from rag.store import VectorStore
+
+
+MODES = ("dense", "bm25", "hybrid")
 
 
 @dataclass(frozen=True)
 class Result:
-    """One retrieved chunk, with its score and 1-based rank."""
+    """One retrieved chunk, with its score and 1-based rank.
+
+    `score` means different things per mode, and they are not comparable:
+    cosine similarity in [-1, 1] for dense, an unbounded BM25 score for bm25,
+    and a fused RRF score (roughly 1/k .. 2/(k+1)) for hybrid. Only the RANK is
+    meaningful across modes -- which is the same reason RRF fuses ranks rather
+    than scores in the first place.
+    """
 
     chunk: Chunk
     score: float
@@ -19,7 +30,9 @@ class Result:
 
 
 class Retriever:
-    def __init__(self, embedder: Embedder, store: VectorStore) -> None:
+    def __init__(self, embedder: Embedder, store: VectorStore,
+                 mode: str = "dense", candidates: int = 50,
+                 rrf_k: int = RRF_K) -> None:
         # The symmetry rule, enforced rather than remembered.
         #
         # Embedding the query with a different model than the documents is the
@@ -39,13 +52,42 @@ class Retriever:
                 f"index is {store.meta.dimension}-D"
             )
 
+        if mode not in MODES:
+            raise ValueError(f"unknown mode {mode!r}, expected one of {MODES}")
+
         self.embedder = embedder
         self.store = store
+        self.mode = mode
+        self.candidates = candidates
+        self.rrf_k = rrf_k
+
+        # Built eagerly for the keyword modes and skipped entirely for dense,
+        # because it is pure overhead there. It is only term counting -- no
+        # model, no API -- so it costs well under a second on this corpus.
+        # embed_text, not text: both arms must see identical input, or a
+        # prepend_context experiment would silently change only one of them.
+        self.bm25 = (
+            BM25Index([c.embed_text for c in store.chunks])
+            if mode in ("bm25", "hybrid") else None
+        )
 
     def retrieve(self, question: str, k: int = 5) -> list[Result]:
-        # encode() takes a list and returns a matrix; we want the single row.
-        query_vector = self.embedder.encode([question])[0]
+        if self.mode == "dense":
+            # encode() takes a list and returns a matrix; we want the single row.
+            scored = self.store.search(self.embedder.encode([question])[0], k=k)
+        elif self.mode == "bm25":
+            scored = self.bm25.search(question, k=k)
+        else:
+            # Two-arm fusion. Each arm retrieves `candidates` deep so a chunk
+            # that only one ranker can find still reaches the fusion step; the
+            # top k of the fused list is what comes back.
+            depth = max(k, self.candidates)
+            dense = [i for i, _ in self.store.search(
+                self.embedder.encode([question])[0], k=depth)]
+            keyword = [i for i, _ in self.bm25.search(question, k=depth)]
+            scored = reciprocal_rank_fusion([dense, keyword], k=self.rrf_k, top=k)
+
         return [
             Result(chunk=self.store.chunks[i], score=score, rank=rank)
-            for rank, (i, score) in enumerate(self.store.search(query_vector, k=k), start=1)
+            for rank, (i, score) in enumerate(scored, start=1)
         ]

@@ -696,6 +696,121 @@ because it makes you fix retrieval that was never broken.
 
 ---
 
+## 8b. Phase 6 experiment log
+
+### Hybrid search: BM25 + Reciprocal Rank Fusion (2026-09-03)
+
+BM25 written from scratch in `rag/hybrid.py` (~40 lines of scoring plus an
+inverted index), fused with the dense ranking by RRF. No `rank_bm25`
+dependency. Cost at query time is one pass over the postings lists of the
+query's terms -- no model, no API call, microseconds.
+
+All rows: 34 questions, 18 documents, `all-MiniLM-L6-v2`, 500/0 chunking,
+document-level scoring.
+
+| Date | Mode | recall@1 | recall@5 | recall@10 | MRR | Notes |
+|---|---|---|---|---|---|---|
+| 2026-09-03 | dense (Phase 4 baseline) | 0.71 | 0.91 | 0.91 | 0.779 | |
+| 2026-09-03 | bm25 alone | 0.59 | 0.82 | **0.94** | 0.697 | worse overall, better r@10 than dense |
+| 2026-09-03 | hybrid, `rrf_k=60` | 0.71 | 0.85 | 0.94 | 0.791 | the literature default: **+0.012, noise** |
+| 2026-09-03 | **hybrid, `rrf_k=10`** | **0.76** | 0.88 | **0.97** | **0.821** | **shipped: +0.042 MRR** |
+
+### Tuning RRF's smoothing constant
+
+| Date | `rrf_k` | recall@1 | recall@5 | recall@10 | MRR |
+|---|---|---|---|---|---|
+| 2026-09-03 | 1 | 0.71 | 0.91 | 0.97 | 0.804 |
+| 2026-09-03 | 3 | 0.71 | 0.91 | 0.97 | 0.808 |
+| 2026-09-03 | **10** | **0.76** | 0.88 | **0.97** | **0.821** |
+| 2026-09-03 | 20 | 0.74 | 0.85 | 0.94 | 0.798 |
+| 2026-09-03 | 60 (Cormack et al.) | 0.71 | 0.85 | 0.94 | 0.791 |
+
+### Candidate depth per arm (at `rrf_k=10`)
+
+| Date | candidates | recall@1 | recall@5 | recall@10 | MRR |
+|---|---|---|---|---|---|
+| 2026-09-03 | 10 | 0.74 | **0.94** | 0.97 | 0.821 |
+| 2026-09-03 | 25 | 0.74 | 0.88 | 0.97 | 0.804 |
+| 2026-09-03 | 50 | 0.76 | 0.88 | 0.97 | 0.821 |
+| 2026-09-03 | 100 | 0.76 | 0.91 | 0.94 | 0.828 |
+| 2026-09-03 | 200 | 0.76 | 0.88 | 0.97 | 0.827 |
+
+Spread 0.804-0.828 across a 20x range of depth. That is noise at 34 questions,
+so candidate depth is **not** a tuned parameter here -- worth knowing, because
+it is the knob people reach for first. Shipped at 50.
+
+### What was learned
+
+1. **The literature default nearly cost us the whole technique.** At the
+   canonical `rrf_k=60`, hybrid search is worth +0.012 MRR -- indistinguishable
+   from noise, and it *loses* r@5. The plan promised "usually the single
+   biggest retrieval win available" and the first measurement said otherwise.
+   At `rrf_k=10` the same code is worth +0.042 MRR, +0.05 r@1 and +0.06 r@10.
+   Had we run it once at the default and moved on, the conclusion would have
+   been "hybrid search doesn't help on prose", which is false.
+
+2. **Why 60 is wrong here, mechanically.** RRF gives rank r the weight
+   1/(k+r). At k=60, rank 1 is worth 1/61 = 0.0164, so a chunk found FIRST by
+   one ranker and missed by the other scores below a chunk both rankers put
+   around 5th (2/65 = 0.0308). That is the intended design -- agreement over
+   enthusiasm -- and it is correct when fusing many similar rankers, which is
+   what the paper tuned on. It is wrong when fusing exactly two rankers with
+   *disjoint competence*, because then "the other ranker didn't find it" is
+   not evidence against a result; it is the expected behaviour.
+
+   The single question that proves it: *"the woman who asked her husband for
+   poison as a wedding gift"* -- dense MISS, BM25 **rank 1**, hybrid at k=60
+   **MISS**, hybrid at k=10 **rank 4**. Fusion at the default threw away a
+   result one arm had ranked first.
+
+3. **A Phase 4 prediction was wrong, and the eval caught it.** §8 predicted
+   that question needed a *re-ranker*, "not BM25 -- the user has no rare term
+   to match on". BM25 put it at rank 1: "poison", "wedding" and "husband" are
+   rare enough in a corpus this size. Intuition about which technique fixes
+   which failure is no better than intuition about retrieval generally.
+
+4. **BM25 alone is worse but not dominated.** MRR 0.697 vs 0.779, yet its
+   r@10 (0.94) beats dense (0.91): it finds documents the embedding cannot
+   reach and then ranks them badly. That combination -- worse average, better
+   coverage -- is exactly the profile that makes a ranker worth fusing rather
+   than adopting or discarding.
+
+5. **The cost is real and lands where predicted.** *"obliging someone to love
+   you"* went from dense rank 1 to hybrid rank 8: a purely abstract question
+   with no rare terms, which BM25 misses entirely and therefore drags down.
+   Note this is the question `eval/questions.yaml` already flags as its weakest
+   label -- so the technique's one casualty is the one question whose label was
+   least defensible anyway.
+
+6. **Two of the three Phase 4 misses are fixed; the third is untouched, as
+   predicted.** *"how long had the narrator known his wife"* (a duration) went
+   MISS -> rank 9. The poison question went MISS -> rank 4. But *"is she still
+   answering personal ads by the end"* is still the only outright miss, because
+   it asks about narrative *position* and neither a vector nor a term count
+   encodes where a chunk sits in the book. Confirms the §8 diagnosis: **this
+   one needs metadata, and no amount of better ranking will reach it.**
+
+7. **Net Phase 4 -> Phase 6 so far: MRR 0.779 -> 0.821, recall@1 0.71 -> 0.76,
+   recall@10 0.91 -> 0.97** (33 of 34 questions now have a correct source in
+   the top 10). Still short of the 0.901 the technical-docs corpus reached,
+   which remains the honest comparison: a novel is a harder retrieval target.
+
+### Still to do in Phase 6
+
+- **Metadata filtering** -- the remaining miss needs chapter position in the
+  index. Cheapest remaining win, and the only one with a named target.
+- **Re-ranking** with a cross-encoder over the top ~30 fused candidates.
+- **Query rewriting**, which on this corpus mostly means resolving pronouns.
+- **Swap the embedding model** to `bge-base-en-v1.5` and re-measure. Now
+  interesting for a second reason: a stronger embedder may erode hybrid's
+  margin, and knowing whether it does is the difference between "we need BM25"
+  and "we needed a better model".
+- **Stemming in `tokenize()`** -- currently absent, so "advertised" does not
+  match "advertising". Deliberately left as a measurable change rather than an
+  assumption.
+
+---
+
 ## 9. Progress
 
 - [x] Phase 0 — Setup
@@ -704,5 +819,5 @@ because it makes you fix retrieval that was never broken.
 - [x] Phase 3 — Store and search
 - [x] Phase 4 — Measure and improve
 - [x] Phase 5 — Generation
-- [ ] Phase 6 — Better retrieval
+- [~] Phase 6 — Better retrieval (hybrid search done: MRR 0.779 → 0.821)
 - [ ] Phase 7 — Serve
