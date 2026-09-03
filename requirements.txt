@@ -1,0 +1,29 @@
+# CPU-only PyTorch. There is no usable NVIDIA GPU on this machine, and the
+# default PyPI torch wheel drags in ~2 GB of CUDA libraries we would never
+# execute. This index serves the same torch built without them.
+--extra-index-url https://download.pytorch.org/whl/cpu
+torch==2.14.0+cpu
+
+# Embeddings: loads all-MiniLM-L6-v2 and gives us .encode()
+sentence-transformers==6.0.1
+
+# The vector store. Phase 3 is a numpy matrix and a dot product.
+numpy==2.5.2
+
+# Generation (Phase 5). Two backends behind one Generator protocol; you need a
+# key for exactly one of them. Both are installed so either can be compared
+# without a reinstall.
+anthropic==1.3.0
+google-genai==2.22.0
+
+# Reads .env so we never hardcode a key
+python-dotenv==1.2.3
+
+# eval/questions.yaml (Phase 4)
+pyyaml==6.0.3
+
+# HTTP (Phase 7). uvicorn[standard] pulls uvloop + httptools, which matter for
+# SSE: the pure-Python fallback buffers more aggressively and makes a streamed
+# answer arrive in visible lurches.
+fastapi==0.121.2
+uvicorn[standard]==0.40.0
