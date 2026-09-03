@@ -48,7 +48,7 @@ class IndexMeta:
     doc_hashes: dict[str, str] = field(default_factory=dict)
 
     @classmethod
-    def now(cls, **kw) -> "IndexMeta":
+    def now(cls, **kw) -> IndexMeta:
         return cls(created_at=datetime.now(timezone.utc).isoformat(timespec="seconds"), **kw)
 
     @property
@@ -147,7 +147,7 @@ class VectorStore:
         )
 
     @classmethod
-    def load(cls, index_dir: str | Path) -> "VectorStore":
+    def load(cls, index_dir: str | Path) -> VectorStore:
         index_dir = Path(index_dir)
         vectors_path, chunks_path = index_dir / VECTORS_FILE, index_dir / CHUNKS_FILE
         if not vectors_path.exists() or not chunks_path.exists():

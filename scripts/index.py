@@ -15,7 +15,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import numpy as np
 
-from rag.chunker import DEFAULT_CHUNK_SIZE, DEFAULT_OVERLAP, chunk_document
+from rag.chunker import DEFAULT_CHUNK_SIZE, chunk_document
 from rag.embedder import DEFAULT_MODEL, LocalEmbedder
 from rag.loader import load_documents
 from rag.store import IndexMeta, VectorStore
@@ -52,8 +52,8 @@ def main() -> int:
         raise SystemExit(f"no .md/.txt documents under {args.data}/ -- nothing to index")
 
     hashes = {d.path: d.content_hash for d in docs}
-    chunk_kw = dict(size=args.size, overlap=args.overlap, strategy=args.strategy,
-                    prepend_context=args.prepend_context, min_section=args.min_section)
+    chunk_kw = {"size": args.size, "overlap": args.overlap, "strategy": args.strategy,
+                "prepend_context": args.prepend_context, "min_section": args.min_section}
 
     # ---- Phase 7: incremental indexing --------------------------------------
     # Reuse a previous run's vectors for documents whose content hash is
@@ -88,7 +88,7 @@ def main() -> int:
     plan: list[tuple[list, np.ndarray | None]] = []
     reused_docs = 0
     for doc in docs:
-        if reusable.get(doc.path) == hashes[doc.path]:
+        if previous is not None and reusable.get(doc.path) == hashes[doc.path]:
             old_chunks, old_vectors = previous.vectors_for(doc.path)
             if old_chunks:
                 plan.append((old_chunks, old_vectors))

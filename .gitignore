@@ -22,3 +22,5 @@ __pycache__/
 
 # Corpus text: an in-copyright novel. Kept local, not committed.
 data/heart-so-white/
+.ruff_cache/
+.pyrefly_cache/

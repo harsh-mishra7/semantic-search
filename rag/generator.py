@@ -16,8 +16,9 @@ from __future__ import annotations
 import os
 import re
 import time
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Protocol
+from typing import ClassVar, Protocol
 
 from rag.retriever import Result
 
@@ -160,9 +161,14 @@ class Generator(Protocol):
 
     model_name: str
 
-    def generate(self, question: str, results: list[Result], **kwargs) -> Answer: ...
-    # Recognised kwargs across backends: effort, show_thinking, stream_to_stdout,
-    # max_tokens, on_delta. `on_delta(text)` is called per streamed text chunk.
+    # These are the keywords every backend accepts; `on_delta(text)` is called
+    # per streamed text chunk. Spelled out rather than left as **kwargs so the
+    # checker can verify each backend against them -- a backend may still add
+    # its own extras on top (Gemini has `retries`).
+    def generate(self, question: str, results: list[Result], *,
+                 effort: str | None = None, show_thinking: bool = False,
+                 stream_to_stdout: bool = True, max_tokens: int = 16000,
+                 on_delta: Callable[[str], None] | None = None) -> Answer: ...
 
 
 class _BaseGenerator:
@@ -263,8 +269,10 @@ class GeminiGenerator(_BaseGenerator):
 
     # Claude effort -> Gemini thinking level. Deliberately lossy: Gemini has
     # four levels to Claude's five, so xhigh and max both land on HIGH.
-    _EFFORT = {"low": "LOW", "medium": "MEDIUM", "high": "HIGH",
-               "xhigh": "HIGH", "max": "HIGH"}
+    _EFFORT: ClassVar[dict[str, str]] = {
+        "low": "LOW", "medium": "MEDIUM", "high": "HIGH",
+        "xhigh": "HIGH", "max": "HIGH",
+    }
 
     def __init__(self, model: str = GEMINI_MODEL, client=None) -> None:
         self.model_name = model
@@ -287,7 +295,10 @@ class GeminiGenerator(_BaseGenerator):
         client = self._client or self._make_client()
         thinking = types.ThinkingConfig(include_thoughts=bool(show_thinking))
         if effort:
-            thinking.thinking_level = self._EFFORT.get(effort, "MEDIUM")
+            # ThinkingLevel is a str-enum; pydantic would coerce the bare
+            # string, but constructing it here keeps the value checkable.
+            thinking.thinking_level = types.ThinkingLevel(
+                self._EFFORT.get(effort, "MEDIUM"))
 
         config = types.GenerateContentConfig(
             system_instruction=SYSTEM_PROMPT,

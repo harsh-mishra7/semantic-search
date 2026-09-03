@@ -32,7 +32,6 @@ the first run of this script, and "crack" match "cracked".
 from __future__ import annotations
 
 import re
-import sys
 from pathlib import Path
 
 import yaml
@@ -45,7 +44,7 @@ TEXT_EXTENSIONS = {".md", ".txt"}
 
 def occurrences(anchor: str, docs: dict[str, str]) -> set[str]:
     """Documents containing `anchor` as a whole term."""
-    pat = re.compile(r"(?<![\w’'])" + re.escape(anchor) + r"(?![\w’'])", re.I)
+    pat = re.compile(r"(?<![\w’'])" + re.escape(anchor) + r"(?![\w’'])", re.IGNORECASE)
     return {name for name, text in docs.items() if pat.search(text)}
 
 

@@ -47,7 +47,7 @@ from pydantic import BaseModel, Field
 
 from rag.generator import Answer
 from rag.pipeline import Pipeline
-from rag.retriever import MODES, Result
+from rag.retriever import Result
 
 # Retrieval settings are process-level, not per-request: changing the mode
 # rebuilds the BM25 index and may load the cross-encoder, which is not

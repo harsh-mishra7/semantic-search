@@ -1,0 +1,10 @@
+# Pyrefly is the type checker behind the editor's Python squiggles. It resolves
+# third-party imports by querying an interpreter, and when that is left to the
+# editor it picks whichever one happens to be selected -- usually the system
+# python, which has none of this project's dependencies installed. The result
+# is every third-party import (numpy, fastapi, sentence_transformers) reported
+# as missing, in a project that runs fine.
+#
+# Pinning the interpreter to the venv makes the check match what actually runs.
+# Relative to this file, so it holds for any clone that follows the README.
+python-interpreter-path = ".venv/bin/python"

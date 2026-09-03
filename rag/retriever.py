@@ -10,7 +10,6 @@ from rag.hybrid import RRF_K, BM25Index, reciprocal_rank_fusion
 from rag.rerank import DEFAULT_DEPTH, CrossEncoderReranker
 from rag.store import VectorStore
 
-
 MODES = ("dense", "bm25", "hybrid")
 
 
@@ -89,11 +88,15 @@ class Retriever:
             # encode() takes a list and returns a matrix; we want the single row.
             scored = self.store.search(self.embedder.encode([question])[0], k=stage1_k)
         elif self.mode == "bm25":
+            # __init__ builds bm25 for exactly the keyword modes, but that
+            # correlation with self.mode is not something the checker can see.
+            assert self.bm25 is not None
             scored = self.bm25.search(question, k=stage1_k)
         else:
             # Two-arm fusion. Each arm retrieves `candidates` deep so a chunk
             # that only one ranker can find still reaches the fusion step; the
             # top k of the fused list is what comes back.
+            assert self.bm25 is not None   # hybrid: built in __init__, as above
             depth = max(stage1_k, self.candidates)
             dense = [i for i, _ in self.store.search(
                 self.embedder.encode([question])[0], k=depth)]

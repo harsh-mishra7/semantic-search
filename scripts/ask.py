@@ -15,8 +15,13 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from dotenv import load_dotenv
 
-from rag.generator import (RATES, SYSTEM_PROMPT, build_user_message,
-                           list_gemini_models, make_generator)
+from rag.generator import (
+    RATES,
+    SYSTEM_PROMPT,
+    build_user_message,
+    list_gemini_models,
+    make_generator,
+)
 from rag.pipeline import Pipeline
 
 

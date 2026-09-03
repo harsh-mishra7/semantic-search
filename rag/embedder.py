@@ -41,7 +41,13 @@ class LocalEmbedder:
         self.model_name = model_name
         self._model = SentenceTransformer(model_name)
         # Renamed from get_sentence_embedding_dimension() in sentence-transformers 6.
-        self.dimension: int = self._model.get_embedding_dimension()
+        # It is typed Optional because a model can omit the metadata; if that
+        # ever happens, fail here rather than letting a None reach the store,
+        # where it would surface as a confusing dimension-mismatch much later.
+        dimension = self._model.get_embedding_dimension()
+        if dimension is None:
+            raise RuntimeError(f"{model_name} reports no embedding dimension")
+        self.dimension: int = dimension
         self.batch_size = batch_size
 
     def encode(self, texts: list[str], show_progress: bool = False) -> np.ndarray:
