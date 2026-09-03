@@ -3,9 +3,8 @@
 A learning project. We build a retrieval-augmented generation system from scratch,
 in stages, with no framework doing the interesting parts for us.
 
-**Status:** Phases 0-4 complete (retrieval: recall@1 0.88, MRR 0.901). Phase 5 code
-is written for two backends (Claude, Gemini); its checkpoint is UNRUN -- needs a
-real key in .env.
+**Status:** Phases 0-5 complete. Retrieval: recall@1 0.88, MRR 0.901. Generation
+running on `gemini-3.6-flash`, both checkpoints passing. Next: Phase 6.
 
 ---
 
@@ -508,6 +507,45 @@ that still competes for a slot in the top k.
 | 2026-09-03 | 300/75 `heading +title` min=150 | 392 | - | 0.80 | 1.00 | 0.877 | only config with perfect r@5 |
 | 2026-09-03 | 700/75 `heading +title` min=150 | 250 | - | 0.80 | 0.92 | 0.850 | |
 
+### Phase 5 notes (generation, `gemini-3.6-flash`)
+
+Checkpoints both pass: the in-corpus question answers correctly citing
+`DEPLOYMENT.md` chars 0-257; `"who won the 2019 cricket world cup"` returns
+"I don't know" despite being handed three timezone chunks at 0.15 similarity.
+
+Exercise 1 (delete the grounding instruction) **did not reproduce as the plan
+predicted**, and the reason is the interesting part:
+
+| System prompt | Answer to an out-of-corpus question |
+|---|---|
+| Full grounding rules | "I don't know. The provided excerpts do not contain..." |
+| Rules deleted, corpus framing kept | "Based on the provided documentation, there is no information about..." |
+| Generic "helpful assistant" | "**England** won the 2019 Cricket World Cup, defeating New Zealand in the final on a boundary countback..." |
+
+So the numbered rules were doing less work than the single sentence *"You answer
+questions about a private documentation corpus"*. Framing carries the grounding;
+the rules mostly shape the wording of the refusal. The parametric-memory failure
+is entirely real -- it just needs the framing removed to surface, not the rules.
+Worth re-testing per model: this is a property of `gemini-3.6-flash`, not a law.
+
+Exercise 3 (k=3 vs 5 vs 10) on *"what do I set as the start command and root
+directory when deploying to Render"*:
+
+| k | thinking tokens | outcome |
+|---|---|---|
+| 3 | 220 | "I don't know" -- the answering chunk was not retrieved |
+| 5 | **872** | partial, hedged, split across two cases |
+| 10 | 394 | complete and correct: root directory empty, no start command needed |
+
+More context helped here, but not monotonically: the model burned **4x the
+thinking tokens at k=5** than at k=3, struggling with partial information, then
+needed less again at k=10 once the answer was actually present. k=3 also
+demonstrates the plan's failure mode 2 directly -- the right chunk wasn't
+retrieved, so no prompt could have saved it.
+
+Exercise 2 (right question, deliberately irrelevant chunks) passed: fed three
+timezone chunks and asked about Vercel, the model refused rather than confabulating.
+
 ### What was learned
 
 1. **Prepending the heading path is the single biggest win**, and the only change
@@ -540,6 +578,6 @@ that still competes for a slot in the top k.
 - [x] Phase 2 — Embeddings
 - [x] Phase 3 — Store and search
 - [x] Phase 4 — Measure and improve
-- [~] Phase 5 — Generation (code written, checkpoint unrun: needs API key)
+- [x] Phase 5 — Generation
 - [ ] Phase 6 — Better retrieval
 - [ ] Phase 7 — Serve

@@ -15,16 +15,23 @@ from __future__ import annotations
 
 import os
 import re
+import time
 from dataclasses import dataclass, field
 from typing import Protocol
 
 from rag.retriever import Result
 
 CLAUDE_MODEL = "claude-opus-5"
-# NOTE: unverified against your account. `python scripts/ask.py --list-models`
-# prints what your key can actually reach; Google's model IDs move faster than
-# any hardcoded default survives.
-GEMINI_MODEL = "gemini-2.5-pro"
+# Verified reachable on this account 2026-09-03. Pinned rather than using the
+# `gemini-pro-latest` / `gemini-flash-latest` aliases, for the same reason
+# requirements.txt pins versions: a model that changes under you makes Phase 4
+# style measurements incomparable across runs.
+#
+# Two things learned by actually trying, both of which a hardcoded guess would
+# have got wrong: `gemini-2.5-pro` (my first guess) is stale, the 3.1-pro
+# preview has a free-tier quota of ZERO, and `gemini-2.5-flash` now 404s for
+# new keys. `python scripts/ask.py --list-models` is the source of truth.
+GEMINI_MODEL = "gemini-3.6-flash"
 
 # USD per million tokens, (input, output). A model absent from this table
 # reports token counts and no cost -- better than inventing a rate, since a
@@ -266,7 +273,7 @@ class GeminiGenerator(_BaseGenerator):
         return genai.Client(api_key=key)
 
     def generate(self, question, results, *, effort=None, show_thinking=False,
-                 stream_to_stdout=True, max_tokens=16000) -> Answer:
+                 stream_to_stdout=True, max_tokens=16000, retries=2) -> Answer:
         from google.genai import errors, types
 
         client = self._client or self._make_client()
@@ -278,39 +285,55 @@ class GeminiGenerator(_BaseGenerator):
             system_instruction=SYSTEM_PROMPT,
             max_output_tokens=max_tokens,
             thinking_config=thinking,
+            # We declare no tools, and without this the SDK prints an
+            # automatic-function-calling advisory on every single call.
+            automatic_function_calling=types.AutomaticFunctionCallingConfig(disable=True),
         )
+        user_message = build_user_message(question, results)
 
         parts: list[str] = []
         usage = None
-        try:
-            for chunk in client.models.generate_content_stream(
-                model=self.model_name,
-                contents=build_user_message(question, results),
-                config=config,
-            ):
-                # usage_metadata is cumulative and only meaningful on the last
-                # chunk that carries it -- keep overwriting.
-                if chunk.usage_metadata is not None:
-                    usage = chunk.usage_metadata
-                for cand in chunk.candidates or []:
-                    for part in (cand.content.parts if cand.content else None) or []:
-                        if not part.text:
-                            continue
-                        if part.thought:
-                            if show_thinking and stream_to_stdout:
-                                print(f"\033[2m{part.text}\033[0m", end="", flush=True)
-                        else:
-                            parts.append(part.text)
-                            if stream_to_stdout:
-                                print(part.text, end="", flush=True)
-        except errors.ClientError as e:
-            # 4xx: our fault. A 404 here almost always means the model ID is
-            # wrong for this account, so point at the discovery command.
-            hint = ("\nrun `python scripts/ask.py --list-models` to see what this "
-                    "key can reach") if e.code == 404 else ""
-            raise SystemExit(f"Gemini client error {e.code}: {e.message}{hint}")
-        except errors.ServerError as e:
-            raise SystemExit(f"Gemini server error {e.code}: {e.message} -- retryable")
+        for attempt in range(retries + 1):
+            try:
+                for chunk in client.models.generate_content_stream(
+                    model=self.model_name, contents=user_message, config=config,
+                ):
+                    # usage_metadata is cumulative and only meaningful on the
+                    # last chunk that carries it -- keep overwriting.
+                    if chunk.usage_metadata is not None:
+                        usage = chunk.usage_metadata
+                    for cand in chunk.candidates or []:
+                        for part in (cand.content.parts if cand.content else None) or []:
+                            if not part.text:
+                                continue
+                            if part.thought:
+                                if show_thinking and stream_to_stdout:
+                                    print(f"\033[2m{part.text}\033[0m", end="", flush=True)
+                            else:
+                                parts.append(part.text)
+                                if stream_to_stdout:
+                                    print(part.text, end="", flush=True)
+                break
+            except (errors.ClientError, errors.ServerError) as e:
+                # 5xx and 429 are transient -- both were hit while testing this
+                # (gemini-3.8-flash returned 503 "high demand" repeatedly). Every
+                # other 4xx is our own request being wrong, so it must not retry.
+                transient = isinstance(e, errors.ServerError) or e.code == 429
+                # Retrying after tokens have already been printed would emit the
+                # answer twice. Streaming buys responsiveness at the cost of
+                # being unable to cleanly retry mid-response.
+                if not transient or parts or attempt == retries:
+                    hint = ""
+                    if e.code == 404:
+                        hint = ("\nrun `python scripts/ask.py --list-models` -- "
+                                "Google's model IDs go stale quickly")
+                    elif transient and parts:
+                        hint = "\n(not retried: output had already started streaming)"
+                    raise SystemExit(f"Gemini error {e.code}: {e.message}{hint}")
+                delay = 2.0 * (2 ** attempt)
+                print(f"\n[{e.code} transient] retrying in {delay:.0f}s "
+                      f"({attempt + 1}/{retries})", flush=True)
+                time.sleep(delay)
 
         return self._finish(
             question, results, "".join(parts),
