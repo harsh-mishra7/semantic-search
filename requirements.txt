@@ -21,3 +21,9 @@ python-dotenv==1.2.3
 
 # eval/questions.yaml (Phase 4)
 pyyaml==6.0.3
+
+# HTTP (Phase 7). uvicorn[standard] pulls uvloop + httptools, which matter for
+# SSE: the pure-Python fallback buffers more aggressively and makes a streamed
+# answer arrive in visible lurches.
+fastapi==0.121.2
+uvicorn[standard]==0.40.0

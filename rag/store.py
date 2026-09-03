@@ -10,7 +10,7 @@ millions. Knowing where that line sits is what stops you adopting one reflexivel
 from __future__ import annotations
 
 import json
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -38,10 +38,38 @@ class IndexMeta:
     overlap: int
     n_chunks: int
     created_at: str
+    # Defaulted so an index written before Phase 7 still loads. All four are
+    # inputs to chunking or embedding, and every one of them must match for a
+    # cached vector to still be correct -- see `reuse_signature`.
+    strategy: str = "fixed"
+    prepend_context: bool = False
+    min_section: int = 0
+    # path -> content hash, for incremental indexing.
+    doc_hashes: dict[str, str] = field(default_factory=dict)
 
     @classmethod
     def now(cls, **kw) -> "IndexMeta":
         return cls(created_at=datetime.now(timezone.utc).isoformat(timespec="seconds"), **kw)
+
+    @property
+    def reuse_signature(self) -> tuple:
+        """Everything that must be identical for a stored vector to be reusable.
+
+        This exists because incremental indexing has one catastrophic failure
+        mode: mixing vectors produced under different settings. Change the
+        chunk size and reuse a document's old vectors, and that document is
+        now indexed with different boundaries than the rest of the corpus --
+        which produces a working index, plausible scores, and quietly wrong
+        rankings. There is no error and no symptom.
+
+        So the rule is: reuse ONLY when every input to chunking and embedding
+        matches, and otherwise rebuild from scratch. Note that `chunk_size` and
+        `overlap` alone were not enough -- `strategy`, `prepend_context` and
+        `min_section` all change chunk boundaries too, and until Phase 7 the
+        index did not record them at all.
+        """
+        return (self.model_name, self.dimension, self.chunk_size, self.overlap,
+                self.strategy, self.prepend_context, self.min_section)
 
 
 class VectorStore:
@@ -97,6 +125,17 @@ class VectorStore:
         top = np.argpartition(-scores, k - 1)[:k]
         top = top[np.argsort(-scores[top])]  # now sort just those k
         return [(int(i), float(scores[i])) for i in top]
+
+    def vectors_for(self, doc_path: str) -> tuple[list[Chunk], np.ndarray]:
+        """This document's chunks and their vectors, in order.
+
+        Used by incremental indexing to lift an unchanged document's work out
+        of the previous index. Rows are gathered by position so the returned
+        pair stays aligned even though the document's chunks need not be
+        contiguous in the matrix.
+        """
+        rows = [i for i, c in enumerate(self.chunks) if c.doc_path == doc_path]
+        return [self.chunks[i] for i in rows], self.vectors[rows]
 
     def save(self, index_dir: str | Path) -> None:
         index_dir = Path(index_dir)

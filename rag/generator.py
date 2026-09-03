@@ -161,6 +161,8 @@ class Generator(Protocol):
     model_name: str
 
     def generate(self, question: str, results: list[Result], **kwargs) -> Answer: ...
+    # Recognised kwargs across backends: effort, show_thinking, stream_to_stdout,
+    # max_tokens, on_delta. `on_delta(text)` is called per streamed text chunk.
 
 
 class _BaseGenerator:
@@ -189,7 +191,7 @@ class ClaudeGenerator(_BaseGenerator):
         self._client = client
 
     def generate(self, question, results, *, effort=None, show_thinking=False,
-                 stream_to_stdout=True, max_tokens=16000) -> Answer:
+                 stream_to_stdout=True, max_tokens=16000, on_delta=None) -> Answer:
         import anthropic
 
         client = self._client or anthropic.Anthropic()
@@ -221,6 +223,11 @@ class ClaudeGenerator(_BaseGenerator):
                         parts.append(event.delta.text)
                         if stream_to_stdout:
                             print(event.delta.text, end="", flush=True)
+                        # Phase 7: the HTTP layer pushes each delta onto a queue
+                        # to re-emit as SSE. A callback rather than a generator
+                        # so the existing streaming loop stays untouched.
+                        if on_delta is not None:
+                            on_delta(event.delta.text)
                     elif event.delta.type == "thinking_delta" and show_thinking:
                         if stream_to_stdout:
                             print(f"\033[2m{event.delta.thinking}\033[0m", end="", flush=True)
@@ -273,7 +280,8 @@ class GeminiGenerator(_BaseGenerator):
         return genai.Client(api_key=key)
 
     def generate(self, question, results, *, effort=None, show_thinking=False,
-                 stream_to_stdout=True, max_tokens=16000, retries=2) -> Answer:
+                 stream_to_stdout=True, max_tokens=16000, retries=2,
+                 on_delta=None) -> Answer:
         from google.genai import errors, types
 
         client = self._client or self._make_client()
@@ -313,6 +321,9 @@ class GeminiGenerator(_BaseGenerator):
                                 parts.append(part.text)
                                 if stream_to_stdout:
                                     print(part.text, end="", flush=True)
+                                # Phase 7: see the note in ClaudeGenerator.
+                                if on_delta is not None:
+                                    on_delta(part.text)
                 break
             except (errors.ClientError, errors.ServerError) as e:
                 # 5xx and 429 are transient -- both were hit while testing this

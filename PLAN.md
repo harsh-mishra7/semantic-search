@@ -9,7 +9,9 @@ Coe's introduction, the Penguin publication note) in place of the quick-clinic
 docs. Phase 6 complete: **recall@5 1.00, recall@10 1.00, MRR 0.821** with
 hybrid BM25+RRF retrieval and a cross-encoder re-ranker (or MRR **0.849** with
 bge-base and no re-ranker, if ranking first matters more than recall).
-Generation running on `gemini-3.6-flash`. Next: Phase 7, serve it.
+Generation running on `gemini-3.6-flash`. Phase 7 complete: FastAPI with
+`/search`, `/ask` and SSE `/ask/stream`, incremental indexing (0.14s vs 16s
+when one document changes), and a README. **All phases done.**
 
 ---
 
@@ -933,6 +935,80 @@ All rows below: 34 questions, 18 documents, 500/0 chunking, `rrf_k=10`.
 
 ---
 
+## 8c. Phase 7 notes (serving)
+
+`rag/api.py` (FastAPI) and incremental indexing in `scripts/index.py`.
+`README.md` written. Two things went wrong in ways worth recording, both
+caused by moving code that had only ever run as a CLI into a long-lived
+process.
+
+### 1. `SystemExit` is a server-killer
+
+Both generators end their error paths with `raise SystemExit(...)`, which is
+exactly right for a CLI: print a useful message, exit non-zero. In a server it
+is dangerous. `SystemExit` derives from `BaseException`, **not** `Exception`,
+so it slips past every ordinary `except Exception` handler in the stack and
+propagates until it tears the worker down -- one bad API key or one rate-limit
+response would take out the process rather than failing a single request. The
+endpoints translate it at the boundary (`except SystemExit -> HTTP 502`).
+
+The general lesson: `raise SystemExit` is a statement about the *process*, and
+library code should not make statements about the process. It only looked
+correct because the only caller had been `__main__`.
+
+### 2. The index was not recording enough to make reuse safe
+
+Incremental indexing skips re-embedding a document whose content hash is
+unchanged. The dangerous half is knowing when a cached vector is *not* still
+valid, and `IndexMeta` recorded only `model_name`, `dimension`, `chunk_size`
+and `overlap` -- while `strategy`, `prepend_context` and `min_section` all
+change chunk boundaries too. Reusing vectors across a change in any of those
+would have produced a perfectly valid index in which some documents were
+chunked one way and the rest another: no error, plausible scores, quietly
+wrong rankings. Exactly the class of bug this project keeps warning about, and
+it appeared the moment caching was introduced.
+
+Fix: `IndexMeta.reuse_signature` is the tuple of every input to chunking and
+embedding, and any mismatch downgrades to a full rebuild with a printed
+explanation. Verified on all four paths -- unchanged, one file edited, config
+changed, and `--full`.
+
+Content hashes, not mtimes: mtime changes on `git checkout` when nothing needs
+re-embedding, and does not change when a file is restored in place when
+everything does. Measured: editing one chapter re-embeds 13 of 1224 chunks in
+**0.14s** against **16s** for a full rebuild.
+
+### 3. `def` vs `async def` decides whether CPU work blocks everyone
+
+Retrieval is CPU-bound: one forward pass to embed the query, then up to 50 more
+in the re-ranker. FastAPI runs a plain `def` endpoint in a threadpool, so that
+work does not stall other connections; an `async def` endpoint runs *on* the
+event loop, where the same work blocks every other request including in-flight
+SSE streams. So `/search` and `/ask` are deliberately `def`, and `/ask/stream`
+-- which must be async in order to yield -- pushes retrieval to a thread
+explicitly and marshals the generator's tokens back with
+`loop.call_soon_threadsafe`.
+
+Streaming reuses the existing loops through an `on_delta` callback rather than
+a new token-yielding generator: the retry, thinking-token and usage-accounting
+logic in `ClaudeGenerator`/`GeminiGenerator` is fiddly and already tested, and
+a second copy of it would drift.
+
+### 4. Small design choices
+
+- `/search` needs no API key. Retrieval and generation are separable, and the
+  server should start and serve retrieval with no key present -- which is why
+  `Pipeline` defers building the generator.
+- `sources` is sent as the first SSE event, before any token. On a reasoning
+  model most of the wall clock is thinking, so a client can render what is
+  being read from while it waits.
+- Retrieval settings are process-level (`RAG_MODE`, `RAG_RERANK`), not
+  per-request: switching mode rebuilds the BM25 postings and may load an 80 MB
+  cross-encoder, which is not something an HTTP caller should be able to
+  trigger.
+
+---
+
 ## 9. Progress
 
 - [x] Phase 0 — Setup
@@ -942,4 +1018,4 @@ All rows below: 34 questions, 18 documents, 500/0 chunking, `rrf_k=10`.
 - [x] Phase 4 — Measure and improve
 - [x] Phase 5 — Generation
 - [x] Phase 6 — Better retrieval (recall@5 0.91 → 1.00; query rewriting deferred, see §8b)
-- [ ] Phase 7 — Serve
+- [x] Phase 7 — Serve

@@ -7,6 +7,7 @@ what lets Phase 4 rewrite the chunking strategy without touching this file.
 
 from __future__ import annotations
 
+import hashlib
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -31,6 +32,19 @@ class Document:
 
     def __len__(self) -> int:
         return len(self.text)
+
+    @property
+    def content_hash(self) -> str:
+        """SHA-256 of the text. Phase 7 uses it to skip re-embedding.
+
+        Of the CONTENT, deliberately -- not the mtime. mtime changes when a
+        file is touched, copied or checked out of git, none of which change
+        what needs embedding; and it does NOT change when a filesystem
+        restores an old copy in place. Hashing the bytes we actually chunk
+        means the question "has the work already been done" is answered by the
+        work's own input.
+        """
+        return hashlib.sha256(self.text.encode("utf-8")).hexdigest()
 
 
 def load_documents(root: str | Path) -> list[Document]:
