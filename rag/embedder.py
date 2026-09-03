@@ -1,6 +1,6 @@
-"""Phase 2: text -> vectors.
+"""Text -> vectors.
 
-The `Embedder` protocol is the seam that makes Phase 6's model swap a one-line
+The `Embedder` protocol is the seam that makes swapping the model a one-line
 change. Everything downstream depends on this interface, never on
 sentence-transformers directly.
 """

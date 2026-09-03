@@ -1,7 +1,7 @@
 """Build the index: data/ -> index/vectors.npy + index/chunks.json
 
     python scripts/index.py
-    python scripts/index.py --size 300 --overlap 0     # Phase 4 sweeps
+    python scripts/index.py --size 300 --overlap 0     # chunking sweeps
 """
 
 from __future__ import annotations

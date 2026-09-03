@@ -1,4 +1,4 @@
-"""Phase 6: cross-encoder re-ranking. The second stage of two-stage retrieval.
+"""Cross-encoder re-ranking. The second stage of two-stage retrieval.
 
 BI-ENCODER vs CROSS-ENCODER, which is the whole idea:
 

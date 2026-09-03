@@ -1,4 +1,4 @@
-"""Phase 7: HTTP. Retrieval and grounded answers over the same Pipeline.
+"""HTTP. Retrieval and grounded answers over the same Pipeline.
 
     uvicorn rag.api:app --reload          # dev
     uvicorn rag.api:app --port 8000       # then GET http://127.0.0.1:8000/docs
@@ -14,9 +14,8 @@ THE ONE THING THIS FILE EXISTS TO GET RIGHT: load once, serve many.
 Building a Pipeline costs ~10s for the embedding model, ~2s for the
 cross-encoder, plus reading the index and building the BM25 postings. Doing
 that per request would make every query ~12s slower than it needs to be, so it
-happens once in the lifespan handler and is then shared. That is the entire
-reason Phase 5 put the expensive setup in `Pipeline.__init__` rather than in
-`ask()`.
+happens once in the lifespan handler and is then shared. That is why `Pipeline`
+puts the expensive setup in `__init__` rather than in `ask()`.
 
 ASYNC vs THREADPOOL, which is easy to get backwards here. Retrieval is
 CPU-bound (a forward pass to embed the query, then up to 50 more in the

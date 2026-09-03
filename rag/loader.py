@@ -1,8 +1,8 @@
-"""Phase 1: files on disk -> Document objects.
+"""Files on disk -> Document objects.
 
 The loader's only job is to find text files and read them. It deliberately knows
 nothing about chunking, markdown structure, or embeddings. Keeping it dumb is
-what lets Phase 4 rewrite the chunking strategy without touching this file.
+what lets the chunking strategy be rewritten without touching this file.
 """
 
 from __future__ import annotations

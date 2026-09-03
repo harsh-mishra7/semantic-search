@@ -1,4 +1,4 @@
-"""Phase 4: measure retrieval. recall@k and MRR over eval/questions.yaml.
+"""Measure retrieval: recall@k and MRR over eval/questions.yaml.
 
     python eval/run_eval.py                                  # baseline only
     python eval/run_eval.py --sweep 300/0,300/75,500/0,500/75,500/150,1000/75

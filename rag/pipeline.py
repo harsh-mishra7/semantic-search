@@ -1,4 +1,4 @@
-"""Phase 5: the whole thing, wired together. retrieve -> prompt -> generate."""
+"""The whole thing, wired together. retrieve -> prompt -> generate."""
 
 from __future__ import annotations
 

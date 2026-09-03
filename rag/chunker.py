@@ -1,12 +1,12 @@
-"""Phase 1: Document -> list[Chunk].
+"""Document -> list[Chunk].
 
 A fixed-size character chunker with overlap. This is deliberately the dumbest
 thing that works: it counts characters and cuts, with no idea whether it is
 slicing through the middle of a sentence, a code block, or a table.
 
-That naivety is the point. Phase 4 builds an eval set first, and only THEN
-tries smarter chunking -- so that "split on markdown headings" is a change we
-can attach a number to, rather than a change that merely feels better.
+That naivety is the point. The eval set came first, and only THEN the smarter
+strategies -- so that "split on markdown headings" is a change we can attach a
+number to, rather than a change that merely feels better.
 """
 
 from __future__ import annotations

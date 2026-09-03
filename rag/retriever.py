@@ -1,4 +1,4 @@
-"""Phase 3: question -> ranked chunks. Embedder and store, tied together."""
+"""Question -> ranked chunks. Embedder and store, tied together."""
 
 from __future__ import annotations
 

@@ -1,5 +1,5 @@
-"""Phase 6: BM25 keyword ranking, and Reciprocal Rank Fusion to combine it
-with the dense vector search from Phase 3.
+"""BM25 keyword ranking, and Reciprocal Rank Fusion to combine it with the
+dense vector search in `store.py`.
 
 WHY BOTHER, when semantic search already works?
 

@@ -1,4 +1,4 @@
-"""Phase 3: persist chunks + vectors, and search them.
+"""Persist chunks + vectors, and search them.
 
 The whole store is a numpy matrix and a dot product. No vector database, on
 purpose: 196 chunks x 384 dims is 300 KB, and even 100,000 chunks would be a

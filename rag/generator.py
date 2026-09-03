@@ -1,11 +1,11 @@
-"""Phase 5: retrieved chunks + question -> a grounded, cited answer.
+"""Retrieved chunks + question -> a grounded, cited answer.
 
 This is the only part of the system that costs money, and the only part where
 being wrong is invisible: a confident, well-formatted, fabricated answer looks
 exactly like a good one. Almost everything here exists to make that harder.
 
-Two backends sit behind one `Generator` protocol, for the same reason Phase 2
-put a protocol behind `LocalEmbedder`: the seam is what makes swapping a
+Two backends sit behind one `Generator` protocol, for the same reason
+`Embedder` sits in front of `LocalEmbedder`: the seam is what makes swapping a
 one-line change instead of a refactor. The prompt, the citation parsing, and
 the grounding contract are shared -- only the transport differs. That also
 makes the backends comparable: same prompt, same corpus, different model.

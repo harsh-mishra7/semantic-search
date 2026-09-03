@@ -1,6 +1,6 @@
 """One-off corpus prep: split the raw ebook text export into per-chapter files.
 
-WHY SPLIT AT ALL: every metric and technique in Phase 4 scores at *document*
+WHY SPLIT AT ALL: every retrieval metric here scores at *document*
 granularity -- `expected_sources` is a list of doc paths, and recall@k asks
 whether a correct document appeared in the top k. A corpus of one 620 KB file
 makes that measurement vacuous: every chunk retrieved is trivially from the

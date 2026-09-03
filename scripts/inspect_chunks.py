@@ -1,10 +1,10 @@
-"""Phase 1 checkpoint: load the corpus, chunk it, and look at the result.
+"""Load the corpus, chunk it, and look at the result.
 
     python scripts/inspect_chunks.py
     python scripts/inspect_chunks.py --size 300 --overlap 0 --seed 7
 
 Nothing here is part of the pipeline -- it exists so you can eyeball whether
-chunks are coherent units of text before we spend Phase 2 embedding them.
+chunks are coherent units of text before spending the time to embed them.
 """
 
 from __future__ import annotations
