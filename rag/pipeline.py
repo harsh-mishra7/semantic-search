@@ -20,7 +20,8 @@ class Pipeline:
 
     def __init__(self, index_dir: str | Path = "index",
                  generator: Generator | None = None,
-                 mode: str = "dense", candidates: int = 50) -> None:
+                 mode: str = "dense", candidates: int = 50,
+                 rerank: bool = False) -> None:
         self.store = VectorStore.load(index_dir)
         # Deferred: retrieval works with no API key at all, so a missing key
         # must not stop `scripts/search.py` or the Phase 4 eval from running.
@@ -29,7 +30,7 @@ class Pipeline:
         # the match, and reading it from the index means the caller cannot
         # accidentally pick a different one.
         self.retriever = Retriever(LocalEmbedder(self.store.meta.model_name), self.store,
-                                   mode=mode, candidates=candidates)
+                                   mode=mode, candidates=candidates, rerank=rerank)
 
     def retrieve(self, question: str, k: int = 5) -> list[Result]:
         return self.retriever.retrieve(question, k=k)

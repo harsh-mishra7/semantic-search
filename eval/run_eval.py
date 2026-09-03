@@ -25,6 +25,7 @@ from rag.chunker import chunk_documents
 from rag.embedder import DEFAULT_MODEL, LocalEmbedder
 from rag.hybrid import RRF_K, BM25Index, reciprocal_rank_fusion
 from rag.loader import load_documents
+from rag.rerank import DEFAULT_DEPTH, DEFAULT_RERANK_MODEL, CrossEncoderReranker
 from rag.store import IndexMeta, VectorStore
 
 KS = (1, 5, 10)
@@ -79,14 +80,26 @@ def first_hit_rank(indices: list[int], chunks: list, expected: set[str]) -> int 
 
 
 def score(store: VectorStore, bm25: BM25Index, qvecs: np.ndarray,
-          questions: list[dict], mode: str, depth: int, rrf_k: int):
-    ranks = [
-        first_hit_rank(
-            ranked_indices(mode, store, bm25, qvecs[i], q["question"], depth, rrf_k),
-            store.chunks, set(q["expected_sources"]),
-        )
-        for i, q in enumerate(questions)
-    ]
+          questions: list[dict], mode: str, depth: int, rrf_k: int,
+          reranker: CrossEncoderReranker | None = None,
+          rerank_depth: int = DEFAULT_DEPTH):
+    ranks = []
+    for i, q in enumerate(questions):
+        indices = ranked_indices(mode, store, bm25, qvecs[i], q["question"], depth, rrf_k)
+        if reranker is not None:
+            # Stage 2 re-reads only the top `rerank_depth` of stage 1. Anything
+            # below that is untouched but kept, so the tail still counts toward
+            # recall@10 -- a re-ranker should not be able to LOSE a result that
+            # stage 1 had at rank 12.
+            head, tail = indices[:rerank_depth], indices[rerank_depth:]
+            # chunk.text, not embed_text: the cross-encoder actually reads the
+            # language, so a synthetic filename prefix would be noise it has to
+            # attend to. (Identical under the shipped config, which prepends
+            # nothing -- so this choice is reasoned, not yet measured.)
+            reordered = reranker.rerank(
+                q["question"], [store.chunks[j].text for j in head], head)
+            indices = [j for j, _ in reordered] + tail
+        ranks.append(first_hit_rank(indices, store.chunks, set(q["expected_sources"])))
     n = len(questions)
     recall = {k: sum(1 for r in ranks if r is not None and r <= k) / n for k in KS}
     # MRR: a question with no correct source in the top MAX_K contributes 0.
@@ -109,6 +122,12 @@ def main() -> int:
     ap.add_argument("--candidates", type=int, default=50,
                     help="candidates per arm before fusion (hybrid only)")
     ap.add_argument("--rrf-k", type=int, default=RRF_K, help="RRF smoothing constant")
+    ap.add_argument("--rerank", action="store_true",
+                    help="Phase 6: re-read the top candidates with a cross-encoder")
+    ap.add_argument("--rerank-depth", type=int, default=DEFAULT_DEPTH,
+                    help="how many stage-1 candidates the cross-encoder re-reads")
+    ap.add_argument("--rerank-model", default=DEFAULT_RERANK_MODEL)
+    ap.add_argument("--stem", action="store_true", help="suffix-strip BM25 tokens")
     args = ap.parse_args()
 
     questions = yaml.safe_load(Path(args.questions).read_text(encoding="utf-8"))
@@ -118,10 +137,15 @@ def main() -> int:
     embedder = LocalEmbedder(args.model)
     # Queries are config-independent: embed them once for the whole sweep.
     qvecs = embedder.encode([q["question"] for q in questions])
+    # Loaded once for the whole sweep, like the embedder: the weights do not
+    # depend on the chunking config.
+    reranker = CrossEncoderReranker(args.rerank_model) if args.rerank else None
 
     print(f"\n{len(questions)} questions | {len(docs)} documents | {embedder.model_name} "
           f"| mode={args.mode}"
           + (f" candidates={args.candidates} rrf_k={args.rrf_k}" if args.mode == "hybrid" else "")
+          + (f" | rerank={args.rerank_model.split('/')[-1]} depth={args.rerank_depth}"
+             if reranker else "")
           + "\n")
     print(f"{'config':>12} {'chunks':>7} {'r@1':>7} {'r@5':>7} {'r@10':>7} {'MRR':>7} {'embed':>7}")
     print("-" * 62)
@@ -139,9 +163,10 @@ def main() -> int:
             IndexMeta.now(model_name=embedder.model_name, dimension=embedder.dimension,
                           chunk_size=size, overlap=overlap, n_chunks=len(chunks)),
         )
-        bm25 = BM25Index([c.embed_text for c in chunks])
+        bm25 = BM25Index([c.embed_text for c in chunks], stem=args.stem)
         recall, mrr, ranks = score(store, bm25, qvecs, questions,
-                                   args.mode, args.candidates, args.rrf_k)
+                                   args.mode, args.candidates, args.rrf_k,
+                                   reranker, args.rerank_depth)
         results.append((label, len(chunks), recall, mrr, ranks))
         print(f"{label:>12} {len(chunks):>7} "
               f"{recall[1]:>7.2f} {recall[5]:>7.2f} {recall[10]:>7.2f} {mrr:>7.3f} "

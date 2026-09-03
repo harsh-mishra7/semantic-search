@@ -32,6 +32,13 @@ def main() -> int:
     ap.add_argument("--index", default="index")
     ap.add_argument("--mode", default="hybrid", choices=["dense", "bm25", "hybrid"],
                     help="Phase 6: hybrid (default) fuses dense vectors with BM25")
+    # ON by default here and OFF in search.py, deliberately. ask.py stuffs k
+    # chunks into a prompt, so the number that decides answer quality is
+    # recall@k -- and re-ranking takes recall@5 from 0.88 to 1.00. search.py
+    # exists to inspect the ranking itself, where you want stage 1 unaltered.
+    ap.add_argument("--rerank", action="store_true", default=True,
+                    help="re-read candidates with a cross-encoder (default on)")
+    ap.add_argument("--no-rerank", dest="rerank", action="store_false")
     ap.add_argument("--effort", choices=["low", "medium", "high", "xhigh", "max"],
                     help="thinking depth; API default is high")
     ap.add_argument("--show-thinking", action="store_true")
@@ -50,7 +57,7 @@ def main() -> int:
         ap.error("a question is required (or use --list-models)")
     question = " ".join(args.question)
 
-    pipe = Pipeline(args.index, mode=args.mode)
+    pipe = Pipeline(args.index, mode=args.mode, rerank=args.rerank)
     results = pipe.retrieve(question, k=args.k)
 
     print(f"\nretrieved {len(results)} chunks for {question!r}")

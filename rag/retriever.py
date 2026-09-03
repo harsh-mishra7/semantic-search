@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from rag.chunker import Chunk
 from rag.embedder import Embedder
 from rag.hybrid import RRF_K, BM25Index, reciprocal_rank_fusion
+from rag.rerank import DEFAULT_DEPTH, CrossEncoderReranker
 from rag.store import VectorStore
 
 
@@ -32,7 +33,9 @@ class Result:
 class Retriever:
     def __init__(self, embedder: Embedder, store: VectorStore,
                  mode: str = "dense", candidates: int = 50,
-                 rrf_k: int = RRF_K) -> None:
+                 rrf_k: int = RRF_K, rerank: bool = False,
+                 rerank_depth: int = DEFAULT_DEPTH,
+                 reranker: CrossEncoderReranker | None = None) -> None:
         # The symmetry rule, enforced rather than remembered.
         #
         # Embedding the query with a different model than the documents is the
@@ -71,21 +74,38 @@ class Retriever:
             if mode in ("bm25", "hybrid") else None
         )
 
+        # Stage 2. Costs a ~80 MB model load, so it is built only when asked
+        # for; an already-loaded one can be passed in to share it across
+        # Retrievers (Phase 7 will want exactly that).
+        self.rerank_depth = rerank_depth
+        self.reranker = reranker or (CrossEncoderReranker() if rerank else None)
+
     def retrieve(self, question: str, k: int = 5) -> list[Result]:
+        # With a re-ranker, stage 1 must retrieve deeper than k: the whole
+        # point is that stage 2 can promote something from rank 30 into the
+        # top 5. Retrieving only k would leave it nothing to promote.
+        stage1_k = max(k, self.rerank_depth) if self.reranker else k
         if self.mode == "dense":
             # encode() takes a list and returns a matrix; we want the single row.
-            scored = self.store.search(self.embedder.encode([question])[0], k=k)
+            scored = self.store.search(self.embedder.encode([question])[0], k=stage1_k)
         elif self.mode == "bm25":
-            scored = self.bm25.search(question, k=k)
+            scored = self.bm25.search(question, k=stage1_k)
         else:
             # Two-arm fusion. Each arm retrieves `candidates` deep so a chunk
             # that only one ranker can find still reaches the fusion step; the
             # top k of the fused list is what comes back.
-            depth = max(k, self.candidates)
+            depth = max(stage1_k, self.candidates)
             dense = [i for i, _ in self.store.search(
                 self.embedder.encode([question])[0], k=depth)]
             keyword = [i for i, _ in self.bm25.search(question, k=depth)]
-            scored = reciprocal_rank_fusion([dense, keyword], k=self.rrf_k, top=k)
+            scored = reciprocal_rank_fusion([dense, keyword], k=self.rrf_k, top=stage1_k)
+
+        if self.reranker is not None:
+            head = [i for i, _ in scored]
+            # chunk.text, not embed_text: a cross-encoder actually reads the
+            # language, so a synthetic prefix would be noise it has to attend to.
+            scored = self.reranker.rerank(
+                question, [self.store.chunks[i].text for i in head], head, k=k)
 
         return [
             Result(chunk=self.store.chunks[i], score=score, rank=rank)

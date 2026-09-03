@@ -6,9 +6,10 @@ in stages, with no framework doing the interesting parts for us.
 **Status:** Phases 0-5 complete; Phase 4 re-run on a new corpus. The corpus is
 now Javier Marías's *A Heart So White* (18 documents: 16 chapters, Jonathan
 Coe's introduction, the Penguin publication note) in place of the quick-clinic
-docs. Retrieval on prose: **recall@1 0.71, MRR 0.779** at 500/0 -- down from
-0.88/0.901 on technical documentation, and the drop is the point. Generation
-running on `gemini-3.6-flash`. Next: Phase 6, where this corpus should pay off.
+docs. Phase 6 complete: **recall@5 1.00, recall@10 1.00, MRR 0.821** with
+hybrid BM25+RRF retrieval and a cross-encoder re-ranker (or MRR **0.849** with
+bge-base and no re-ranker, if ranking first matters more than recall).
+Generation running on `gemini-3.6-flash`. Next: Phase 7, serve it.
 
 ---
 
@@ -811,6 +812,127 @@ it is the knob people reach for first. Shipped at 50.
 
 ---
 
+### Re-ranking, the embedding swap, and stemming (2026-09-03)
+
+`rag/rerank.py` adds a cross-encoder second stage (`ms-marco-MiniLM-L-6-v2`).
+All rows below: 34 questions, 18 documents, 500/0 chunking, `rrf_k=10`.
+`embed` is time to embed the whole corpus, the cost the swap actually charges.
+
+| Date | Config | recall@1 | recall@5 | recall@10 | MRR | embed |
+|---|---|---|---|---|---|---|
+| | **MiniLM-L6, 384-D** | | | | | |
+| 2026-09-03 | dense (Phase 4 baseline) | 0.71 | 0.91 | 0.91 | 0.779 | 17s |
+| 2026-09-03 | bm25 | 0.59 | 0.82 | 0.94 | 0.697 | - |
+| 2026-09-03 | bm25 `+stem` | 0.65 | 0.88 | 0.94 | 0.745 | - |
+| 2026-09-03 | hybrid | **0.76** | 0.88 | 0.97 | 0.821 | 17s |
+| 2026-09-03 | hybrid `+stem` | **0.76** | 0.91 | 0.97 | 0.825 | 17s |
+| 2026-09-03 | dense + rerank d=30 | 0.62 | 0.91 | 0.97 | 0.748 | 17s |
+| 2026-09-03 | bm25 + rerank d=30 | 0.68 | 0.94 | 0.97 | 0.782 | - |
+| 2026-09-03 | hybrid + rerank d=10 | 0.71 | 0.94 | 0.97 | 0.799 | 17s |
+| 2026-09-03 | hybrid + rerank d=30 | 0.71 | 0.94 | **1.00** | 0.806 | 17s |
+| 2026-09-03 | **hybrid + rerank d=50** | 0.71 | **1.00** | **1.00** | 0.810 | 17s |
+| | **bge-base-en-v1.5, 768-D** | | | | | |
+| 2026-09-03 | dense | 0.71 | 0.97 | 0.97 | 0.805 | 104s |
+| 2026-09-03 | **hybrid** | **0.76** | 0.97 | **1.00** | **0.849** | 102s |
+| 2026-09-03 | hybrid + rerank d=50 | 0.71 | **1.00** | **1.00** | 0.814 | 102s |
+
+### What was learned
+
+1. **Re-ranking splits the metrics in opposite directions, and that is the
+   most useful thing measured in this phase.** It takes recall@5 from 0.88 to
+   **1.00** -- every question now has a correct source in the top 5, worst rank
+   5, zero misses -- while *lowering* recall@1 (0.76 -> 0.71) and MRR (0.821 ->
+   0.810). The cross-encoder is excellent at deciding relevant-vs-irrelevant
+   and no better than tuned hybrid at ordering several genuinely relevant
+   chunks, which a novel produces constantly.
+
+   **So which number is "better" depends entirely on the consumer, and up to
+   now we had been optimising the wrong one.** `scripts/ask.py` stuffs k=5
+   chunks into a prompt: what decides answer quality is whether the right chunk
+   is *in* the prompt, i.e. recall@5 -- not whether it is first. MRR was the
+   right metric in Phase 4 for comparing chunkers; it is the wrong metric for
+   the deployed pipeline. Hence re-ranking defaults ON in `ask.py` and OFF in
+   `search.py`, which exists to inspect ranking itself.
+
+   Evidence weight: the recall@5 gain is 4 questions, the recall@1 loss is 2.
+   Neither is large at n=34, but the gain is the better-supported of the two.
+
+2. **A re-ranker rescues a weak first stage and degrades a strong one.**
+   +0.085 MRR on bm25, **-0.031 on dense**, -0.011 on hybrid. Its ceiling is
+   stage 1's recall@depth -- it cannot promote what was never retrieved -- so
+   depth matters monotonically here (d=10: 0.94 r@5; d=50: 1.00). "Add a
+   re-ranker" is not a free improvement; it is a trade whose sign depends on
+   how good stage 1 already is.
+
+3. **A better embedder and BM25 are independent wins, which settles the
+   question §8b raised.** bge-base beats MiniLM on dense (0.779 -> 0.805) and
+   is the best single config measured (bge hybrid, **MRR 0.849**). Crucially
+   hybrid's contribution does *not* erode: +0.042 MRR on MiniLM, +0.044 on
+   bge. So the answer to "did we need BM25 or did we need a better model" is
+   **both, separately** -- the better embedder did not learn what BM25 knows.
+
+4. **But if you re-rank, the cheap embedder is enough.** MiniLM and bge both
+   reach recall@5 = 1.00 once re-ranked. bge costs **6x the indexing time**
+   (104s vs 17s) and 2x the storage for exactly the same recall@5. It only
+   pays off if you are *not* re-ranking, or if you genuinely need rank-1
+   precision. This is the phase's practical conclusion, and it is the opposite
+   of what "just use a better model" would have suggested.
+
+5. **Stemming helps BM25 alone (+0.048 MRR) and is noise inside hybrid
+   (+0.004).** The dense arm already treats "advertised" and "advertising" as
+   near-identical, so the two techniques are redundant -- stemming fixes a
+   problem the embedding had already solved. **Measured and declined:** it
+   stays off by default, since it buys nothing in the shipped configuration
+   while adding a real failure mode (suffix collisions). A component's value
+   depends on what else is in the system, not on its own merit.
+
+6. **Two more of my own predictions were falsified.** §8 said the poison
+   question needed a cross-encoder -- BM25 fixed it. §8b said the
+   narrative-position question ("is she still answering personal ads by the
+   end") needed *metadata*, because "neither a vector nor a term count encodes
+   where a chunk sits in the book". True, but irrelevant: the cross-encoder
+   reads query and chunk together and put it at rank 4, then rank 1 in the
+   shipped retriever. **Metadata filtering's only motivating case evaporated**,
+   so it is dropped rather than built -- a filter no question needs is a
+   feature with no evidence behind it.
+
+7. **Net Phase 4 -> Phase 6: recall@5 0.91 -> 1.00, recall@10 0.91 -> 1.00,
+   MRR 0.779 -> 0.821** in the shipped config (MiniLM, hybrid, re-rank d=50 for
+   the answer path), or **MRR 0.849** if ranking first is what you care about
+   (bge, hybrid, no re-rank). Which technique bought which points:
+   hybrid/RRF +0.042 MRR, re-ranking +0.12 recall@5, bge +0.026 MRR,
+   stemming +0.000, metadata filtering not built.
+
+8. **Unlooked-for bonus: the cross-encoder score is a usable abstention
+   signal, and cosine was not.** On the Phase 5 out-of-corpus checkpoint
+   ("who won the 2019 cricket world cup") every re-ranked candidate scores
+   about **-11**, against **+1.07** for the top chunk on a real question. The
+   dense scores for the same pair of questions were 0.106 and 0.557 -- a real
+   gap, but on a scale where 0.106 is not obviously "nothing", since plenty of
+   genuine matches score 0.2-0.4. A cross-encoder logit near its floor means
+   the model read the question and the chunk together and found no relation,
+   which is a much stronger claim. Phase 7 could threshold on it and refuse to
+   call the LLM at all, saving the tokens the prompt would have cost. Not
+   measured, so not built -- but it is the cheapest idea this phase produced.
+
+### Not done, and why
+
+- **Query rewriting** is the one listed technique left unbuilt. It costs an LLM
+  call on the critical path of every query, and with recall@5 already at 1.00
+  there is no headroom left for it to buy on this eval set. It would need a
+  harder question set to even be measurable -- which is the honest reason to
+  defer it, not "we ran out of time".
+- **Metadata filtering** -- see finding 6. Its motivating case was solved by
+  re-ranking.
+- **The bge query prefix.** bge is trained asymmetrically and expects queries
+  prefixed with "Represent this sentence for searching relevant passages: ".
+  The numbers above do NOT apply it, so bge is measured slightly below its
+  potential. Applying it means an `Embedder` that encodes queries and documents
+  differently, which is a real interface change -- and the one clearly
+  worthwhile experiment still on the table.
+
+---
+
 ## 9. Progress
 
 - [x] Phase 0 — Setup
@@ -819,5 +941,5 @@ it is the knob people reach for first. Shipped at 50.
 - [x] Phase 3 — Store and search
 - [x] Phase 4 — Measure and improve
 - [x] Phase 5 — Generation
-- [~] Phase 6 — Better retrieval (hybrid search done: MRR 0.779 → 0.821)
+- [x] Phase 6 — Better retrieval (recall@5 0.91 → 1.00; query rewriting deferred, see §8b)
 - [ ] Phase 7 — Serve

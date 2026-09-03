@@ -70,7 +70,26 @@ PAPER_RRF_K = 60   # kept so the deviation from the literature stays visible
 _TOKEN = re.compile(r"[a-z0-9]+")
 
 
-def tokenize(text: str) -> list[str]:
+def _stem(word: str) -> str:
+    """Conservative suffix stripping -- roughly Porter step 1, no more.
+
+    Deliberately crude and deliberately measured rather than assumed. Stemming
+    trades two error types against each other: it fixes "advertised" not
+    matching "advertising", and it creates collisions that destroy precision
+    ("universe"/"university" is the classic). Length guards keep the worst of
+    the second kind away from short words, where a stripped suffix is most
+    likely to have been part of the stem.
+    """
+    for suffix, replacement, min_stem in (
+        ("ies", "y", 1), ("sses", "ss", 1), ("ing", "", 4),
+        ("ed", "", 4), ("ly", "", 4), ("s", "", 3),
+    ):
+        if word.endswith(suffix) and len(word) - len(suffix) >= min_stem:
+            return word[: -len(suffix)] + replacement
+    return word
+
+
+def tokenize(text: str, stem: bool = False) -> list[str]:
     """Lowercase, then split on anything that is not a letter or digit.
 
     Deliberately crude, and NOT stemmed. Two consequences worth knowing:
@@ -87,7 +106,8 @@ def tokenize(text: str) -> list[str]:
     and uses U+2019 throughout, so a regex written for ASCII "'" would split
     every possessive in a second, invisible way.
     """
-    return _TOKEN.findall(text.lower().replace("’", "'"))
+    tokens = _TOKEN.findall(text.lower().replace("’", "'"))
+    return [_stem(t) for t in tokens] if stem else tokens
 
 
 class BM25Index:
@@ -98,11 +118,15 @@ class BM25Index:
     consequence if it breaks (right scores, wrong text, no error).
     """
 
-    def __init__(self, texts: list[str], k1: float = K1, b: float = B) -> None:
+    def __init__(self, texts: list[str], k1: float = K1, b: float = B,
+                 stem: bool = False) -> None:
         self.k1, self.b = k1, b
         self.n = len(texts)
+        # Must be applied identically to documents and queries: stemming one
+        # side only would silently break every match involving a suffix.
+        self.stem = stem
 
-        term_freqs = [Counter(tokenize(t)) for t in texts]
+        term_freqs = [Counter(tokenize(t, stem=stem)) for t in texts]
         self.lengths = np.array([sum(tf.values()) for tf in term_freqs], dtype=np.float64)
         # An empty corpus, or one of only empty chunks, would divide by zero in
         # the length-normalisation term below.
@@ -129,7 +153,7 @@ class BM25Index:
     def scores(self, query: str) -> np.ndarray:
         """BM25 score for every chunk. Chunks matching no query term score 0."""
         out = np.zeros(self.n, dtype=np.float64)
-        for term in tokenize(query):
+        for term in tokenize(query, stem=self.stem):
             idf = self.idf.get(term)
             if idf is None:      # term does not occur in the corpus at all
                 continue
