@@ -3,8 +3,8 @@
 A learning project. We build a retrieval-augmented generation system from scratch,
 in stages, with no framework doing the interesting parts for us.
 
-**Status:** Phases 0-4 complete. Measured retrieval: recall@1 0.88, MRR 0.901.
-No LLM yet. Next: Phase 5 (generation).
+**Status:** Phases 0-4 complete (retrieval: recall@1 0.88, MRR 0.901). Phase 5 code
+is written but its checkpoint is UNRUN -- it needs a real ANTHROPIC_API_KEY in .env.
 
 ---
 
@@ -539,6 +539,6 @@ that still competes for a slot in the top k.
 - [x] Phase 2 — Embeddings
 - [x] Phase 3 — Store and search
 - [x] Phase 4 — Measure and improve
-- [ ] Phase 5 — Generation
+- [~] Phase 5 — Generation (code written, checkpoint unrun: needs API key)
 - [ ] Phase 6 — Better retrieval
 - [ ] Phase 7 — Serve
